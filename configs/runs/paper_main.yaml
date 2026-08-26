@@ -22,7 +22,7 @@ reasoning_effort: null
 text_verbosity: null
 
 # LLM judge used for primary paper metrics.
-use_llm_judge: true
+use_llm_judge: false
 judge_provider: openai
 judge_model: gpt-4o
 judge_temperature: 0.0

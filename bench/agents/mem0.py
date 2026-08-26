@@ -548,7 +548,7 @@ class Mem0Agent(BaseMemoryAgent):
         cfg.llm.config = {
             "model": self._mem0_upstream_llm_model or default_llm_model,
             "temperature": 0.1,
-            "max_tokens": 2000,
+            "max_tokens": 16384,
         }
         if llm_api_key:
             cfg.llm.config["api_key"] = llm_api_key

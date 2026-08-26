@@ -323,7 +323,7 @@ def main() -> None:
         "--llm_provider",
         type=str,
         default="openai",
-        choices=["stub", "openai", "anthropic", "gemini", "deepseek", "llama", "nvidia"],
+        choices=["stub", "openai", "anthropic", "gemini", "deepseek", "llama", "nvidia", "openrouter"],
         help="Which hosted API to call. Use stub for offline deterministic mode.",
     )
     p.add_argument("--llm_model", type=str, default=None, help="Provider model name")
@@ -377,8 +377,20 @@ def main() -> None:
         "--judge_provider",
         type=str,
         default=None,
-        choices=["stub", "openai", "anthropic", "gemini", "deepseek", "llama", "nvidia"],
+        choices=["stub", "openai", "anthropic", "gemini", "deepseek", "llama", "nvidia", "openrouter"],
         help="Judge provider (defaults to --llm_provider)",
+    )
+    p.add_argument(
+        "--judge_api_base",
+        type=str,
+        default=None,
+        help="Judge-only API base URL. Defaults to --api_base. Set this when the answer model is local but the judge is remote.",
+    )
+    p.add_argument(
+        "--judge_api_key_env",
+        type=str,
+        default=None,
+        help="Judge-only API key env var. Defaults to --api_key_env.",
     )
     p.add_argument("--judge_model", type=str, default=None, help="Judge model name (defaults to --llm_model)")
     p.add_argument("--judge_temperature", type=float, default=0.0)
@@ -727,8 +739,8 @@ def main() -> None:
             text_verbosity=args.judge_text_verbosity or args.text_verbosity,
             timeout_s=args.timeout_s,
             max_retries=args.max_retries,
-            api_base=args.api_base,
-            api_key_env=args.api_key_env,
+            api_base=(args.judge_api_base if args.judge_api_base is not None else args.api_base),
+            api_key_env=(args.judge_api_key_env if args.judge_api_key_env is not None else args.api_key_env),
             anthropic_version=args.anthropic_version,
             merge_system_into_user=True,
         )

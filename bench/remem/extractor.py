@@ -149,6 +149,14 @@ class EpisodicExtractor:
                     cleaned.append({"subject": subj, "predicate": pred, "object": objv, "qualifiers": quals})
                 if cleaned:
                     return cleaned
+                if not facts:
+                    # The model followed FACT_SYSTEM_PROMPT's explicit instruction
+                    # to "return an empty list" when no clean fact can be formed
+                    # -- e.g. bare acknowledgements like "Okay." / "Yes.".
+                    # That is a successful extraction, not a parse failure.
+                    # Falling through to the heuristic here would fabricate a
+                    # `<speaker> said <raw turn text>` triple for every such turn.
+                    return []
             if self.logger:
                 self.logger.warning("ReMem fact extraction parse failed; falling back to heuristic")
         return self._heuristic_facts(timestamp=timestamp, principal_id=principal_id, role=role, text=text, gists=gists)

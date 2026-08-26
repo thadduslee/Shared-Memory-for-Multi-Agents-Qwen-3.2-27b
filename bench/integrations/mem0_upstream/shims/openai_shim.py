@@ -14,6 +14,8 @@ The shim talks to an OpenAI-compatible REST API via HTTPS.
 from __future__ import annotations
 
 import json
+import os
+import json
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
@@ -105,7 +107,10 @@ class OpenAI:
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
 
-        resp = requests.post(url, headers=headers, data=json.dumps(payload), timeout=120)
+        _HTTP_TIMEOUT = float(os.getenv("GATEMEM_MEM0_HTTP_TIMEOUT", "1800"))
+        resp = requests.post(url, headers=headers, data=json.dumps(payload), timeout=_HTTP_TIMEOUT)
+
+        #resp = requests.post(url, headers=headers, data=json.dumps(payload), timeout=120)
         if resp.status_code < 200 or resp.status_code >= 300:
             raise RuntimeError(f"OpenAI API error {resp.status_code}: {resp.text[:500]}")
         return resp.json()

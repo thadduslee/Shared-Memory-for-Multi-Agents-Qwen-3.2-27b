@@ -17,3 +17,6 @@ torch
 
 # Needed only if you want: --agent mem0 --mem0_backend upstream
 pydantic>=2
+
+# Needed only for: python scripts/make_figures.py
+matplotlib

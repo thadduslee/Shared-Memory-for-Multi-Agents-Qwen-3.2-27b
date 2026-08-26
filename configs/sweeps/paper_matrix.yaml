@@ -66,23 +66,57 @@ models:
     llm_provider: gemini
     llm_model: gemini-2.5-pro
     temperature: 0.2
+    
+  qwen32b:
+    llm_provider: llama
+    llm_model: Qwen/Qwen2.5-32B-Instruct
+    api_base: http://localhost:8000/v1
+    api_key_env: LOCAL_API_KEY
+    temperature: 0.2
+    use_llm_judge: false
+    embed_provider: hf
+    embed_model: sentence-transformers/all-MiniLM-L6-v2
+    embed_device: cpu
+    resume: true
+
+  # Local vLLM answer model on 2x L40 (CUDA 4,5); see serve_qwen38.sh.
+  # Judging is a separate stage, exactly as for qwen32b: run this sweep with the
+  # inline judge off, then grade with
+  #   bench/scripts/rejudge.py --judge gpt41   (GPT-4.1 via OpenRouter)
+  # so these numbers stay comparable with the existing *__judge-gpt41 results.
+  qwen38_27b:
+    llm_provider: llama
+    llm_model: Qwen/Qwen3.8-27B
+    api_base: http://localhost:8000/v1
+    api_key_env: LOCAL_API_KEY
+    temperature: 0.2
+    use_llm_judge: false
+    # A local 27B on 2x L40 is far slower than a hosted API. The long_context
+    # baseline stuffs 200+ turn episodes into one prompt and can generate 4096
+    # tokens, which blows past the 60s default: measured p90 57s, max 171s.
+    # Timeouts are costly here: each retry throws away and redoes a whole
+    # generation, and exhausting the retries aborts the entire run, because
+    # runner.py re-raises a failed episode instead of skipping it.
+    timeout_s: 1800
+    # This budget must cover the reasoning trace AND the answer. At the shared
+    # 4096 default, 68 predictions already hit the cap -- with the reasoning
+    # parser those would return an EMPTY answer rather than a truncated one,
+    # since the whole budget is spent before `content` begins.
+    max_output_tokens: 16384
+    embed_provider: hf
+    embed_model: sentence-transformers/all-MiniLM-L6-v2
+    embed_device: cpu
+    resume: true
+    # Local backbone only -- the hosted-API models stay on the shared default of
+    # 4 in configs/runs/paper_main.yaml. At 4 the server ran ~4 concurrent reqs
+    # with GPU KV cache usage at 3-5%, i.e. almost entirely idle on capacity.
+    # 8 roughly halves wall-clock while keeping ~2.5x headroom under timeout_s
+    # against the worst per-request latency measured at 4 (648s, a_mem).
+    episode_concurrency: 8
 
 baselines:
-  long_context:
-    agent: long_context
-
-  rag_naive:
-    agent: rag_naive
-
-  rag_policy:
-    agent: rag_policy
-
   a_mem:
     agent: a_mem
-
-  mem0:
-    agent: mem0
-    mem0_backend: upstream
 
   remem_i:
     agent: remem
@@ -91,3 +125,16 @@ baselines:
   remem_s:
     agent: remem
     remem_variant: single
+
+  mem0:
+    agent: mem0
+    mem0_backend: upstream
+
+  long_context:
+    agent: long_context
+
+  rag_naive:
+    agent: rag_naive
+
+  rag_policy:
+    agent: rag_policy

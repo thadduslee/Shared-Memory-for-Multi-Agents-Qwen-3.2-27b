@@ -37,7 +37,11 @@ class OpenAILLM(LLMBase):
         if not self.config.model:
             self.config.model = "gpt-4.1-nano-2025-04-14"
 
-        if os.environ.get("OPENROUTER_API_KEY"):  # Use OpenRouter
+        # An explicitly configured OpenAI-compatible base URL wins over an ambient
+        # OPENROUTER_API_KEY. GateMem exports that key for the remote judge while
+        # pointing mem0 at a local vLLM server; without this guard the memory
+        # extraction calls would be silently redirected to OpenRouter.
+        if os.environ.get("OPENROUTER_API_KEY") and not self.config.openai_base_url:
             self.client = OpenAI(
                 api_key=os.environ.get("OPENROUTER_API_KEY"),
                 base_url=self.config.openrouter_base_url

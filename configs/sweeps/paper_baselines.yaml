@@ -30,21 +30,8 @@ models:
     temperature: 0.2
 
 baselines:
-  long_context:
-    agent: long_context
-
-  rag_naive:
-    agent: rag_naive
-
-  rag_policy:
-    agent: rag_policy
-
   a_mem:
     agent: a_mem
-
-  mem0:
-    agent: mem0
-    mem0_backend: upstream
 
   remem_i:
     agent: remem
@@ -53,3 +40,16 @@ baselines:
   remem_s:
     agent: remem
     remem_variant: single
+
+  mem0:
+    agent: mem0
+    mem0_backend: upstream
+
+  long_context:
+    agent: long_context
+
+  rag_naive:
+    agent: rag_naive
+
+  rag_policy:
+    agent: rag_policy

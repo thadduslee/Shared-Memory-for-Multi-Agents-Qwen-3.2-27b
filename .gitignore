@@ -22,11 +22,16 @@ env/
 # logs
 *.log
 
-# bench outputs
-outputs/
+# bench outputs are committed in this fork so the figures in docs/RESULTS.md
+# can be traced back to the raw predictions they were scored from.
+# outputs/
 
 # misc
 .ipynb_checkpoints/
 .env
 .env.*
 !.env.example
+
+# local caches / scratch
+hf_cache/
+*.bak

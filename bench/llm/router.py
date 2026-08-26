@@ -35,6 +35,10 @@ class LLMRouter:
             from .providers.deepseek import DeepSeekClient
 
             self._client = DeepSeekClient(config)
+        elif provider == "openrouter":
+            from .providers.openrouter import OpenRouterClient
+
+            self._client = OpenRouterClient(config)
         elif provider in ("llama", "nvidia"):
             from .providers.llama import LlamaClient
 

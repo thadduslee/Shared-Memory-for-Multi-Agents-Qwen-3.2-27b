@@ -149,6 +149,33 @@ Across diverse backbones and memory-agent baselines, **no method simultaneously 
 
 ---
 
+## 📈 Qwen Results (this fork)
+
+Two backbones run end to end over all seven memory baselines on the medical
+split, 579 checkpoints each, judged by GPT-4.1:
+**Qwen3.8-27B** and **Qwen2.5-32B-Instruct**.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/model_comparison_dark.png">
+  <img src="docs/figures/model_comparison_light.png" width="95%" alt="Qwen3.8-27B against Qwen2.5-32B-Instruct across utility, MGS, privacy leakage and deletion leakage">
+</picture>
+
+* Long-Context leads on both backbones; **Qwen3.8-27B** reaches 91.0% utility at
+  4.7% privacy leakage (MGS 86.7) against 87.1% / 23.4% (MGS 57.3) for
+  Qwen2.5-32B-Instruct.
+* Utility is close between the two backbones. The MGS gap is almost entirely a
+  leakage gap — and partly an over-refusal gap, since Qwen3.8-27B declines more.
+* **Every method except policy RAG carries the private or deleted record into
+  context more than 83% of the time.** Answer-level scores look governed only
+  because the answer model declines to repeat what it was handed; end-to-end MGS
+  peaks at 7.05%.
+
+📊 **[Full write-up, all figures and the complete results table →](docs/RESULTS.md)**
+
+Regenerate every figure from `outputs/` with `python scripts/make_figures.py`.
+
+---
+
 ## 🚀 Quick Start
 
 Install dependencies:

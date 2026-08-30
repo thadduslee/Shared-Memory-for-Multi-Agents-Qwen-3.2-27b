@@ -1,0 +1,16 @@
+{
+  "targets_metric": "U",
+  "expected_tradeoff": "U increases substantially by eliminating false no_memory on unrelated queries. A and F are expected to remain unchanged or slightly improve because RBAC filtering is untouched and deletion becomes more precise (better detection, query\u2011sensitive tombstones). The extra deletion_terms table adds negligible storage/retrieval overhead and is never exposed to callers, so it does not introduce a leak vector.",
+  "retrieval_loop": "1. Compute query terms via _distinctive_terms(query).\n2. Query deletion_terms for the given patient_id and those terms to obtain matched_tombstones (set of record_id).\n3. Scan all records for the patient (same LEFT JOIN as before).\n   - If tombstone present: add to denied_tombstone ONLY if record_id \u2208 matched_tombstones; otherwise skip.\n   - If no tombstone: apply RBAC gates (role_grants join, relationship check) and include allowed evidence as before.\n4. Log every decision (allow/deny_*) to access_log.",
+  "forgetting_mechanism": "Tombstone handling is now query\u2011sensitive. When a record is tombstoned, we extract its distinctive terms (from body or decrypted ciphertext) and store them in the deletion_terms table, then cryptographically shred the key (for confidential) or erase the body (for plaintext). Later retrieval queries compare the query terms against deletion_terms: a match sets touched_deleted and yields no_memory, while non\u2011matching tombstones are completely ignored. This prevents false no_memory on unrelated queries and allows accurate recognition of actual deletion references.",
+  "work_order": [
+    "Update memory_system/schema.sql: add deletion_terms table and idx_deletion_terms_patient_term; bump SCHEMA_VERSION to 2 in store.py.",
+    "Modify MemoryStore.tombstone() in store.py: before shredding/erasing, extract plaintext, compute _distinctive_terms, insert into deletion_terms (record_id, term, patient_id) with INSERT OR IGNORE.",
+    "Modify MemoryStore.retrieve() in store.py: after computing query terms, query deletion_terms to build matched_tombstones set; in the main loop, only add a tombstone to denied_tombstone if its record_id is in matched_tombstones; otherwise skip (continue).",
+    "Improve _honor_deletion_request() in store.py: broaden deletion detection to accept any message containing at least one of {delete, remove, erase, forget, purge, scrub, wipe} AND at least one of {memory, record, note, number, contact, entry, info, data}; retain term\u2011overlap matching for target selection and fallback to most recent record by same speaker.",
+    "Run pytest tests/ to confirm all existing tests pass; adjust code if needed (no test changes expected)."
+  ],
+  "prior_art": [],
+  "dev_failure_mitigations": null,
+  "responds_to_dev_failure": null
+}

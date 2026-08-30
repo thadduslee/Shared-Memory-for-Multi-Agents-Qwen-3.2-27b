@@ -1,0 +1,16 @@
+{
+  "targets_metric": "U (utility accuracy)",
+  "expected_tradeoff": "Slight risk of A increase due to loosened relevance ranking, but mitigated by strict RBAC and score-based top_k selection; F decreases with better deletion matching.",
+  "retrieval_loop": "Fetch all records for a patient (optionally bounded by as_of_seq) with LEFT JOINs to tombstones and role_grants. Apply gates: (1) tombstone, (2) role grant exists, (3) relationship/scope. For survivors, decrypt if needed, compute relevance score = len(set(query_terms) \u2229 set(body_terms)). Collect (score, record) pairs, sort by score descending then seq descending, take top_k, and return as Decision.allowed. Log each decision (allow/deny) to access_log.",
+  "forgetting_mechanism": "Tombstones and crypto-shredding remain. Deletion request matching now uses Jaccard similarity between the request's distinctive terms and prior record terms; if similarity >= 0.5, tombstone the record. If nothing meets the threshold, fallback to the most recent record from the same speaker. Idempotent tombstone and shred as before.",
+  "work_order": [
+    "Modify `MemoryStore.retrieve` in `memory_system/store.py` to use scored ranking: replace the 'skip if no token overlap' logic with a scoring phase that ranks all RBAC-passed rows by overlapping token count and returns the top_k.",
+    "Modify `_honor_deletion_request` in the same file to use Jaccard similarity instead of a fixed overlap count; tombstone records whose similarity to the request exceeds 0.5.",
+    "Apply schema migration: add `CREATE INDEX idx_records_patient_seq ON records(patient_id, seq)` and bump `SCHEMA_VERSION` to 2 in `memory_system/store.py`.",
+    "Update `memory_system/schema.sql` to include the new index and updated version comment.",
+    "Run the existing test suite; ensure all tests pass. If any new tests are required, add them in `tests/` without modifying existing ones."
+  ],
+  "prior_art": [],
+  "dev_failure_mitigations": null,
+  "responds_to_dev_failure": null
+}

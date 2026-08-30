@@ -1,0 +1,186 @@
+{
+  "thread_id": "run-4df243437fc1",
+  "mode": "real",
+  "scenario": null,
+  "iterations": 3,
+  "halt_reason": "iteration budget exhausted after 3; best MGS=0.3673",
+  "final_curriculum_phase": "standard_retrieval",
+  "metrics": {
+    "U_utility_accuracy": 0.42857142857142855,
+    "A_privacy_leakage_rate": 0.14285714285714285,
+    "F_deletion_leakage_rate": 0.0,
+    "MGS_compliance_utility_score": 0.3673469387755102
+  },
+  "dev_unit_test_pass_rate": 1.0,
+  "dev_files_changed": [
+    "memory_system/agent.py"
+  ],
+  "predictions_path": "/home/thaddus/Auto Research/runs_verify2/iter_3/dev/predictions.jsonl",
+  "n_checkpoints_evaluated": 20,
+  "n_worker_failures": 0,
+  "failure_signature": null,
+  "dev_failure_history": [
+    {
+      "iteration": 1,
+      "signature": "435b8549c2fbcf02",
+      "missing_gates": [],
+      "pass_rate": 1.0,
+      "retries_used": 5,
+      "error": ""
+    }
+  ],
+  "token_usage": {
+    "total_tokens": 814912,
+    "input_tokens": 744657,
+    "output_tokens": 70255
+  },
+  "node_timings": [
+    {
+      "node": "architect",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1787991063.8851907,
+      "tokens": 18654,
+      "duration_s": 45.811
+    },
+    {
+      "node": "developer",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1787991109.7023818,
+      "turns": 16,
+      "tokens": 415386,
+      "workspace_from": "template",
+      "retries": 5,
+      "gates_green": true,
+      "files_changed": 0,
+      "duration_s": 115.38
+    },
+    {
+      "node": "architect",
+      "iteration": 2,
+      "phase": "standard_retrieval",
+      "started_at": 1787991225.0881143,
+      "tokens": 26093,
+      "duration_s": 96.462
+    },
+    {
+      "node": "developer",
+      "iteration": 2,
+      "phase": "standard_retrieval",
+      "started_at": 1787991321.5555546,
+      "turns": 10,
+      "tokens": 96769,
+      "workspace_from": "iter_1",
+      "retries": 0,
+      "gates_green": true,
+      "files_changed": 2,
+      "duration_s": 23.32
+    },
+    {
+      "node": "eval_dispatch",
+      "iteration": 2,
+      "phase": "standard_retrieval",
+      "started_at": 1787991344.8777008,
+      "stage": "dev",
+      "n_checkpoints": 20,
+      "n_shards": 2,
+      "duration_s": 0.05
+    },
+    {
+      "node": "eval_collect",
+      "iteration": 2,
+      "phase": "standard_retrieval",
+      "started_at": 1787991377.4064462,
+      "stage": "dev",
+      "n_predictions": 20,
+      "n_failed_shards": 0,
+      "duration_s": 0.001
+    },
+    {
+      "node": "judge",
+      "iteration": 2,
+      "phase": "standard_retrieval",
+      "started_at": 1787991377.4082184,
+      "stage": "dev",
+      "tokens": 8913,
+      "mgs": 0.12244897959183673,
+      "duration_s": 3.207
+    },
+    {
+      "node": "critic",
+      "iteration": 2,
+      "phase": "standard_retrieval",
+      "started_at": 1787991380.618489,
+      "tokens": 26166,
+      "duration_s": 104.952
+    },
+    {
+      "node": "architect",
+      "iteration": 3,
+      "phase": "standard_retrieval",
+      "started_at": 1787991485.5753095,
+      "tokens": 26659,
+      "duration_s": 71.592
+    },
+    {
+      "node": "developer",
+      "iteration": 3,
+      "phase": "standard_retrieval",
+      "started_at": 1787991557.1720924,
+      "turns": 10,
+      "tokens": 147896,
+      "workspace_from": "iter_2",
+      "retries": 0,
+      "gates_green": true,
+      "files_changed": 1,
+      "duration_s": 56.469
+    },
+    {
+      "node": "eval_dispatch",
+      "iteration": 3,
+      "phase": "standard_retrieval",
+      "started_at": 1787991613.6424208,
+      "stage": "dev",
+      "n_checkpoints": 20,
+      "n_shards": 2,
+      "duration_s": 0.018
+    },
+    {
+      "node": "eval_collect",
+      "iteration": 3,
+      "phase": "standard_retrieval",
+      "started_at": 1787991646.2561078,
+      "stage": "dev",
+      "n_predictions": 20,
+      "n_failed_shards": 0,
+      "duration_s": 0.001
+    },
+    {
+      "node": "judge",
+      "iteration": 3,
+      "phase": "standard_retrieval",
+      "started_at": 1787991646.2579405,
+      "stage": "dev",
+      "tokens": 8874,
+      "mgs": 0.3673469387755102,
+      "duration_s": 3.953
+    },
+    {
+      "node": "critic",
+      "iteration": 3,
+      "phase": "standard_retrieval",
+      "started_at": 1787991650.2135775,
+      "tokens": 22564,
+      "duration_s": 80.917
+    },
+    {
+      "node": "finalize",
+      "iteration": 3,
+      "phase": "standard_retrieval",
+      "started_at": 1787991731.135531,
+      "halt_reason": "iteration budget exhausted after 3; best MGS=0.3673",
+      "duration_s": 0.0
+    }
+  ]
+}

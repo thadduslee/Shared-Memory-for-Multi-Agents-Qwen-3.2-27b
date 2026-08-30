@@ -1,0 +1,17 @@
+{
+  "targets_metric": "U (utility_accuracy)",
+  "expected_tradeoff": "Improves U via FTS retrieval; tradeoff is a small increase in storage (FTS index) and index maintenance overhead. A and F are both improved (no cost) because we fix the care_team relationship leak and remove tombstoned rows from FTS, so the net MGS gain is positive.",
+  "retrieval_loop": "1. For routine/restricted content, use FTS5 MATCH to get candidate record_ids.\n2. Apply tombstone gate (via LEFT JOIN tombstones) to exclude deleted records.\n3. Apply role grant (role_grants) and relationship+scope checks using _relationship_ok (now enforcing relationships for care_team).\n4. For confidential records or if FTS yields no matches, fall back to the original term-overlap scan with the same gates.\n5. Return a Decision with allowed, denied_rbac, denied_scope, denied_tombstone.",
+  "forgetting_mechanism": "On tombstone(): (a) delete row from records_fts; (b) if encrypted, shred the key (NULL key_material) and set key_id=NULL; (c) else set body='' in records. The row remains in records and tombstones for audit, but content is unrecoverable.",
+  "work_order": [
+    "In memory_system/schema.sql: add the records_fts virtual table DDL and the idx_rel_patient_subject index.",
+    "In memory_system/store.py initialize(): after executing schema.sql, run the migration SQL to create records_fts if not present and backfill from existing records.",
+    "In memory_system/store.py ingest_turn(): after INSERT OR REPLACE into records, if sensitivity != 'confidential', INSERT OR REPLACE into records_fts(record_id, body) VALUES (?, ?).",
+    "In memory_system/store.py tombstone(): before/after existing logic, run DELETE FROM records_fts WHERE record_id = ?.",
+    "In memory_system/store.py retrieve(): replace the current loop with a two-step approach: (a) build and execute an FTS5 query for candidates, (b) for each candidate, apply the same gates; if no candidates, fall back to the original scan. Ensure that the gates and decision fields remain unchanged.",
+    "In memory_system/store.py _relationship_ok(): modify the care_team case to check for any relationship row (SELECT 1 FROM relationships WHERE subject_id=? AND patient_id=?) instead of relying solely on role membership."
+  ],
+  "prior_art": [],
+  "dev_failure_mitigations": null,
+  "responds_to_dev_failure": null
+}

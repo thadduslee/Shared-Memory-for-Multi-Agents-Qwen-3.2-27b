@@ -1,0 +1,17 @@
+{
+  "targets_metric": "U (utility accuracy)",
+  "expected_tradeoff": "Small reduction in precision due to more lenient ranking, but A and F stay low because the RBAC and tombstone gates are applied before relevance scoring. The tradeoff is acceptable under the multiplicative MGS formula.",
+  "retrieval_loop": "1. Fetch all records for the patient (and as_of_seq) by scanning the records table, LEFT JOIN tombstones and role_grants.\n2. Apply gates in order: (a) skip if tombstoned, (b) skip if no role grant, (c) skip if relationship/scope fails.\n3. For each passing record, compute relevance score = |shared_terms| / (|query_terms| + 1) using the distinctive terms helper.\n4. Sort by score DESC, take top_k. Exclude records with score 0.\n5. Return Decision with allowed list and denial lists (tombstone, rbac, scope) populated.",
+  "forgetting_mechanism": "Tombstones mark a record deleted; for confidential records we cryptographically shred the key (set key_material = NULL, shredded_at = NOW) so the ciphertext becomes unrecoverable. For routine/restricted records, we overwrite the body with '' in place. The tombstone check is always first in retrieval, so deleted content is never returned even to authorized requesters. A record\u2019s existence is known internally (to return `no_memory` instead of an answer) but not revealed to the requester.",
+  "work_order": [
+    "1. In `memory_system/store.py`, rewrite the `retrieve` method to use the scoring algorithm described above. Keep all existing gate checks and audit logging.",
+    "2. Add `CREATE INDEX idx_records_patient_seq ON records(patient_id, seq)` to `schema.sql` and apply it to any existing stores via `apply_migration`.",
+    "3. Run the local test suite (`pytest tests/`) and fix any regressions.",
+    "4. If possible, run a small benchmark episode to verify that utility queries now return relevant evidence.",
+    "5. Add a unit test in `tests/test_rbac.py` (or a new file) that asserts a partial query match still returns a record.",
+    "6. Confirm the `MGS` tally improves while `A` and `F` remain \u2264 0.05."
+  ],
+  "prior_art": [],
+  "dev_failure_mitigations": null,
+  "responds_to_dev_failure": null
+}

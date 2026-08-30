@@ -1,0 +1,17 @@
+{
+  "targets_metric": "U (utility_accuracy)",
+  "expected_tradeoff": "Increases U by releasing already-authorized records even when they share no lexical tokens with the query. May modestly reduce answer precision for LLM-wired runs due to noisier evidence, but A and F are unaffected because all released records still clear the RBAC/relationship gates and deletion/tombstone logic is unchanged.",
+  "retrieval_loop": "In MemoryStore.retrieve(): scan rows already filtered by patient_id/as_of_seq; for each row evaluate tombstones first, then RBAC grant, then relationship/scope, appending denied reasons only when _is_responsive() is true; for cleared rows decrypt if needed and append (score, seq, row, plaintext) to candidates. Do NOT apply a binary _is_responsive filter to the allowed path. Sort candidates by (score, seq) descending and take top_k. Log allow for each released row. This releases any gate-cleared record even if it shares no lexical tokens with the query, while preserving gate order and deny tallies.",
+  "forgetting_mechanism": "Tombstone row inserted with record_id; for confidential rows, crypto_keys.key_material is set to NULL and shredded_at is set, and records.key_id is NULLed; for plaintext rows, records.body is overwritten with ''. Retrieve checks tombstones before RBAC and treats a wiped/encrypted body as deleted, so no path can reconstruct deleted content. No changes proposed.",
+  "work_order": [
+    "In memory_system/store.py, modify MemoryStore.retrieve(): delete the `responsive` list construction and the `responsive[:top_k]` loop; instead sort the full `candidates` list by (score, seq) descending and iterate over `candidates[:top_k]` to build `decision.allowed`. Keep `_is_responsive` for the deny_rbac/deny_scope tallies only.",
+    "In the same file, update the retrieve() docstring to explain that relevance scores rank, not gate, the allow path.",
+    "In memory_system/agent.py, change the default `top_k` from 8 to 20 (both in __init__ and, if set, in the retrieve() call). Do not change the public signature.",
+    "Run the existing test suite: `pytest tests/ -q` and fix any regression; all current tests must pass unchanged.",
+    "Run the Developer local smoke runner (`_smoke_runner.py`) to confirm the agent still produces valid actions.",
+    "Run the eval runner on a representative sample of the previously failing checkpoints (or the full shard if feasible) and confirm allowed/evidence now contains the missing content (e.g. apixaban, estrogen patch, appointment times)."
+  ],
+  "prior_art": [],
+  "dev_failure_mitigations": null,
+  "responds_to_dev_failure": null
+}

@@ -1,0 +1,15 @@
+{
+  "targets_metric": "MGS >= 0.60, with target U=0.75, A<=0.02, F<=0.02",
+  "expected_tradeoff": "Adding FTS increases storage and write overhead, but improves retrieval relevance (U). The tombstone FTS matching reduces false refusals (lower F) at the cost of a slightly more complex query. No RBAC weakening occurs, so A stays low. Overall MGS improves due to higher U and lower F, with minor performance cost acceptable for a single-file SQLite store.",
+  "retrieval_loop": "1. Expand requester role to closure via RECURSIVE CTE on role_hierarchy.\n2. Use FTS5 MATCH on records_fts with the query to fetch candidate record_ids ordered by bm25.\n3. Join back to records, filter by patient_id, as_of_seq, is_deleted=0.\n4. Apply RBAC: only include records whose sensitivity is allowed for the role closure AND requester has a relationship to the patient (role_grants \u00d7 relationships).\n5. Check tombstones: for the candidate set, run an FTS query on tombstones.terms to detect if the query contains any distinctive terms from deleted records. If any deleted record matches, mark it as denied_tombstone.\n6. Build decision: allowed = candidates not in tombstone set; denied_rbac/scope = candidates that failed RBAC; denied_tombstone = candidates flagged.\n7. Return Decision(allowed, denied_rbac, denied_scope, denied_tombstone) which drives sanitize_and_decide().",
+  "forgetting_mechanism": "On delete_record:\n  - Extract top distinctive terms from body (e.g., rare drug names, lab codes, specific identifiers).\n  - Insert into tombstones(record_id, deleted_at, requested_by, reason, terms).\n  - Mark records.is_deleted=1.\n  - Call kms.destroy_key(key_id) to permanently orphan ciphertext.\nOn retrieve:\n  - After RBAC filtering, run a lightweight FTS query against tombstones.terms (with unused term weighting) to see if any of the user's query tokens match a tombstone's stored terms.\n  - If a match exists, that candidate is flagged as deleted; if any candidate is flagged, the entire response becomes 'no_memory' via sanitize_and_decide (unless the requester is the one who requested deletion? not per current policy).\nThis preserves the invariant: deletion is observable (we refuse on queries that reference it) but the content is unrecoverable (crypto-shredded and RBAC-denied).",
+  "work_order": [
+    "Apply migration SQL to add records_fts table, sync triggers, and tombstone terms index.",
+    "Update store.py retrieve() method to use FTS5 MATCH for candidate selection and BM25 ranking, then apply RBAC and tombstone gate as described.",
+    "Update delete_record() to extract and store tombstone terms and destroy the KMS key.",
+    "Add unit tests for: (a) utility - queries retrieve correct relevant records; (b) RBAC - unauthorized records never returned; (c) forgetting - deleted content triggers no_memory only when queried specifically, unrelated queries unaffected.",
+    "Run full benchmark suite and collect U, A, F metrics.",
+    "If MGS < 0.60, iterate on retrieval ranking weights or tombstone term extraction heuristics."
+  ],
+  "prior_art": []
+}

@@ -1,0 +1,52 @@
+{
+  "current_mgs": 0.5,
+  "mgs_if_perfect": {
+    "U": 1.0,
+    "A": 0.5,
+    "F": 0.5
+  },
+  "marginal": {
+    "U": 0.5,
+    "A": 0.0,
+    "F": 0.0
+  },
+  "ranked": [
+    "U",
+    "A",
+    "F"
+  ],
+  "dominant_term": "U",
+  "dominant_gain": 0.5,
+  "raw": {
+    "U": 0.5,
+    "A": 0.0,
+    "F": 0.0
+  },
+  "component": "memory_system/agent.py::sanitize_and_decide",
+  "proposals": [
+    {
+      "component": "memory_system/store.py::Decision (add denied_relevant flag) + memory_system/agent.py::sanitize_and_decide (branch condition)",
+      "kind": "design",
+      "change": "Add `denied_relevant: bool = False` to Decision. In `retrieve`, set it to True whenever a record denied by gate 2 or 3 shares a query term with the request. In `sanitize_and_decide`, change the `answer_redacted` branch to require `decision.denied_relevant` in addition to `decision.allowed and decision.touched_unauthorized`; otherwise fall through to `answer` for any non-empty allowed set.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_003_hepatitisC_mavyret_deleted_recovery_contact_ckpt_05"
+      ]
+    }
+  ],
+  "observed_mechanisms": [
+    "wrong_action_shape"
+  ],
+  "mechanisms": [
+    {
+      "name": "wrong_action_shape",
+      "component": "memory_system/agent.py::sanitize_and_decide",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_003_hepatitisC_mavyret_deleted_recovery_contact_ckpt_05"
+      ]
+    }
+  ],
+  "evidence_checkpoint_ids": [
+    "med_episode_rewrite_en_003_hepatitisC_mavyret_deleted_recovery_contact_ckpt_05"
+  ]
+}

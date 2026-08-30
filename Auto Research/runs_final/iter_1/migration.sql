@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS idx_records_patient_seq ON records(patient_id, seq); -- rational: accelerated as-of retrieval for patient-scoped queries

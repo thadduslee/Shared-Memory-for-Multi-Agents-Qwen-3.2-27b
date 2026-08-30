@@ -1,0 +1,98 @@
+{
+  "thread_id": "run-4fdd6dea6959",
+  "mode": "real",
+  "scenario": null,
+  "iterations": 1,
+  "halt_reason": "iteration budget exhausted after 1; best MGS=0.5000",
+  "final_curriculum_phase": "scoped_access_control",
+  "metrics": {
+    "U_utility_accuracy": 0.5,
+    "A_privacy_leakage_rate": 0.0,
+    "F_deletion_leakage_rate": 0.0,
+    "MGS_compliance_utility_score": 0.5
+  },
+  "dev_unit_test_pass_rate": 1.0,
+  "dev_files_changed": [
+    "memory_system/agent.py",
+    "memory_system/store.py"
+  ],
+  "predictions_path": "/home/thaddus/Auto Research/runs_smoketest/iter_1/dev/predictions.jsonl",
+  "n_checkpoints_evaluated": 6,
+  "n_worker_failures": 0,
+  "failure_signature": null,
+  "dev_failure_history": [],
+  "token_usage": {
+    "total_tokens": 464596,
+    "input_tokens": 429338,
+    "output_tokens": 35258
+  },
+  "node_timings": [
+    {
+      "node": "architect",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1787993794.5831223,
+      "tokens": 21327,
+      "duration_s": 74.693
+    },
+    {
+      "node": "developer",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1787993869.2834482,
+      "turns": 22,
+      "tokens": 415492,
+      "workspace_from": "template",
+      "retries": 1,
+      "gates_green": true,
+      "files_changed": 2,
+      "duration_s": 166.782
+    },
+    {
+      "node": "eval_dispatch",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1787994036.0684812,
+      "stage": "dev",
+      "n_checkpoints": 6,
+      "n_shards": 1,
+      "duration_s": 0.079
+    },
+    {
+      "node": "eval_collect",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1787994055.0431864,
+      "stage": "dev",
+      "n_predictions": 6,
+      "n_failed_shards": 0,
+      "duration_s": 0.001
+    },
+    {
+      "node": "judge",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1787994055.0451584,
+      "stage": "dev",
+      "tokens": 2702,
+      "mgs": 0.5,
+      "duration_s": 1.122
+    },
+    {
+      "node": "critic",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1787994056.1703598,
+      "tokens": 21808,
+      "duration_s": 56.874
+    },
+    {
+      "node": "finalize",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1787994113.0473125,
+      "halt_reason": "iteration budget exhausted after 1; best MGS=0.5000",
+      "duration_s": 0.0
+    }
+  ]
+}

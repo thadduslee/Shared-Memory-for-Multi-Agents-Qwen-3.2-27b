@@ -1,0 +1,85 @@
+{
+  "current_mgs": 0.503268,
+  "mgs_if_perfect": {
+    "U": 0.823529,
+    "A": 0.611111,
+    "F": 0.503268
+  },
+  "marginal": {
+    "U": 0.320261,
+    "A": 0.107843,
+    "F": 0.0
+  },
+  "ranked": [
+    "U",
+    "A",
+    "F"
+  ],
+  "dominant_term": "U",
+  "dominant_gain": 0.320261,
+  "raw": {
+    "U": 0.6111111111111112,
+    "A": 0.17647058823529413,
+    "F": 0.0
+  },
+  "component": "MemoryStore.retrieve() relevance gate (memory_system/store.py)",
+  "proposals": [
+    {
+      "component": "MemoryStore.retrieve() (memory_system/store.py)",
+      "kind": "design",
+      "change": "Delete the allow-side relevance gate block (`if terms and record_id not in from_fts and not (terms & _distinctive_terms(plaintext)): continue`). Keep the FTS query and `from_fts` computation \u2014 it feeds `_is_responsive_for_denial` on the deny side and must stay. Every patient-scoped, non-retired, seq<=as_of row is then evaluated through tombstone \u2192 plaintext \u2192 RBAC \u2192 relationship/scope, and passing rows carry their real body regardless of token overlap. The `retired` flag protecting delete-request turns already exists (ingest_turn sets it; retrieve filters it), so no schema change is needed; do not add DDL.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_015_ms_relapse_deleted_cedar_bridge_line_ckpt_08",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ]
+    },
+    {
+      "component": "sanitize_and_decide() (memory_system/agent.py)",
+      "kind": "design",
+      "change": "Change the `if decision.allowed and decision.touched_unauthorized:` branch so it returns `answer_redacted` only when the query's terms are NOT fully covered by the allowed bodies; if every term in `decision.query_terms` appears in the concatenated allowed text, return `answer` instead (the denied rows were superfluous to what was asked). Uses the already-present `decision.query_terms`; no signature change.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_09"
+      ]
+    }
+  ],
+  "observed_mechanisms": [
+    "answered_but_content_missing",
+    "wrong_action_shape"
+  ],
+  "mechanisms": [
+    {
+      "name": "answered_but_content_missing",
+      "component": "MemoryStore.retrieve() relevance gate (the `if terms and record_id not in from_fts and not (terms & _distinctive_terms(plaintext)): continue` block)",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_015_ms_relapse_deleted_cedar_bridge_line_ckpt_08",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ]
+    },
+    {
+      "name": "wrong_action_shape",
+      "component": "sanitize_and_decide() (memory_system/agent.py) \u2014 the `if decision.allowed and decision.touched_unauthorized: return \"answer_redacted\"` branch",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_09"
+      ]
+    }
+  ],
+  "evidence_checkpoint_ids": [
+    "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+    "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_09",
+    "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+    "med_episode_rewrite_en_015_ms_relapse_deleted_cedar_bridge_line_ckpt_08",
+    "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+    "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+    "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+  ]
+}

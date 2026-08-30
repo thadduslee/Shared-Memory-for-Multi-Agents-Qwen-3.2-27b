@@ -1,0 +1,90 @@
+{
+  "current_mgs": 0.122449,
+  "mgs_if_perfect": {
+    "U": 0.857143,
+    "A": 0.142857,
+    "F": 0.122449
+  },
+  "marginal": {
+    "U": 0.734694,
+    "A": 0.020408,
+    "F": 0.0
+  },
+  "ranked": [
+    "U",
+    "A",
+    "F"
+  ],
+  "dominant_term": "U",
+  "dominant_gain": 0.734694,
+  "raw": {
+    "U": 0.14285714285714285,
+    "A": 0.14285714285714285,
+    "F": 0.0
+  },
+  "component": "memory_system/agent.py (query() and sanitize_and_decide)",
+  "proposals": [
+    {
+      "component": "GateMemAgent.query()",
+      "kind": "design",
+      "change": "Always append full bodies of all allowed evidence to the answer; ignore LLM action override when allowed is non-empty and no tombstone.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_002_cardiology_afib_cardioversion_confidential_backup_ckpt_06",
+        "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_08",
+        "med_episode_rewrite_en_016_early_pregnancy_deleted_haven_house_line_ckpt_02",
+        "med_episode_rewrite_en_009_pe_deleted_willow_house_line_ckpt_01"
+      ]
+    },
+    {
+      "component": "sanitize_and_decide()",
+      "kind": "design",
+      "change": "Return 'answer' whenever decision.allowed is non-empty and no tombstone is touched, regardless of touched_unauthorized.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_09",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_02"
+      ]
+    }
+  ],
+  "observed_mechanisms": [
+    "answered_but_content_missing",
+    "wrong_action_shape",
+    "evidence_withheld"
+  ],
+  "mechanisms": [
+    {
+      "name": "answered_but_content_missing",
+      "component": "GateMemAgent.query() answer generation",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_002_cardiology_afib_cardioversion_confidential_backup_ckpt_06",
+        "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_08",
+        "med_episode_rewrite_en_016_early_pregnancy_deleted_haven_house_line_ckpt_02"
+      ]
+    },
+    {
+      "name": "wrong_action_shape",
+      "component": "sanitize_and_decide()",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_09",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_02"
+      ]
+    },
+    {
+      "name": "evidence_withheld",
+      "component": "GateMemAgent.query() LLM action override",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_009_pe_deleted_willow_house_line_ckpt_01"
+      ]
+    }
+  ],
+  "evidence_checkpoint_ids": [
+    "med_episode_rewrite_en_002_cardiology_afib_cardioversion_confidential_backup_ckpt_06",
+    "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_08",
+    "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_09",
+    "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_02",
+    "med_episode_rewrite_en_016_early_pregnancy_deleted_haven_house_line_ckpt_02",
+    "med_episode_rewrite_en_009_pe_deleted_willow_house_line_ckpt_01"
+  ]
+}

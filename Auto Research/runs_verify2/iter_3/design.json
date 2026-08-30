@@ -1,0 +1,18 @@
+{
+  "targets_metric": "U",
+  "expected_tradeoff": "Minimal expected cost to A or F. The changes only re-label actions for fully-covered allowed sets and ensure answer bodies are complete from cleared evidence; they do not widen access or alter deletion behaviour. The coverage heuristic could in edge cases misclassify a partial\u2011auth query as 'answer', but the test suite and critique evidence suggest the heuristic matches the required behaviour.",
+  "retrieval_loop": "Retrieval applies three gates in strict order: (1) tombstone check \u2014 any deleted record yields deny_tombstone; (2) RBAC role grant via role_grants LEFT JOIN \u2014 missing grant yields deny_rbac; (3) relationship/scope check \u2014 via _relationship_ok() \u2192 deny_scope. Relevance filtering (distinctive term overlap) follows, then top_k truncation. The allowed set is returned with full body plaintext for the answerer.",
+  "forgetting_mechanism": "Explicit tombstone rows plus cryptographic shredding: for confidential records the encryption key is destroyed (crypto_keys.key_material set NULL, key_id cleared from record) making ciphertext unrecoverable; for plaintext records the body column is overwritten with empty string. Deletion demands are matched by content-overlap; repeated deletion calls are idempotent.",
+  "work_order": [
+    "Open memory_system/agent.py and modify sanitize_and_decide() to implement the coverage heuristic: if decision.allowed is non-empty and no tombstone, compute the union of distinctive terms from allowed body texts; if the set of query terms (decision.query_terms) is a subset of that union, return ('answer', ...); otherwise return ('answer_redacted', ...).",
+    "Ensure the existing test test_partial_authorization_is_redacted still passes (it should, because query terms 'hiv','screening','result' are not covered by allowed body).",
+    "In GateMemAgent.query(), replace the answer construction block so that the final answer always includes the full bodies of all allowed records. Implement the snippet from the critique: if llm returns a non-empty answer, append an [Evidence] section; else concatenate allowed bodies.",
+    "In GateMemAgent.query(), after calling sanitize_and_decide, add a guard: if decision.allowed is non-empty and not decision.touched_deleted, force action = 'answer' (overriding any LLM-provided action). Remove the line 'action = str(rendered.get(\"action\") or action)' or gate it with the above condition.",
+    "Run the full local test suite (pytest) to confirm no regressions, especially test_partial_authorization_is_redacted and test_decision_maps_to_refuse_not_answer.",
+    "Run the bench harness smoke test to verify the agent still produces valid actions and answers.",
+    "If all local tests pass, submit the agent changes."
+  ],
+  "prior_art": [],
+  "dev_failure_mitigations": null,
+  "responds_to_dev_failure": null
+}

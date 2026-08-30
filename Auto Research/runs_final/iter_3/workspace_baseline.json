@@ -1,0 +1,9 @@
+{
+  "memory_system/__init__.py": "ca0954be33c94ebb375768fe7978b074cbb4539c5637363f9956ea0b710d4f2d",
+  "memory_system/agent.py": "86c71ca7694aecdce7a95c8b4e4327f53b13832f89c2b8899838a17152aa5bb4",
+  "memory_system/schema.sql": "cabdf3e05a6d77e189b9669cdeb748300cc65d6c4fefe4bcd35c9a70c5d35e0b",
+  "memory_system/store.py": "77bb6eb9809a3d9771cdc6ade947a5e78c73ee2d2283a4af830eded729d5f3df",
+  "tests/test_deletion_scope.py": "e50731a2f0d77adcf40d5ac2bd3ab46ac8e6847306e49c1bf426b80d95a0a5cf",
+  "tests/test_forgetting.py": "429519282fa110fb813096e6db652cfd4dca4aa152d952cbe0a2824d856b99a8",
+  "tests/test_rbac.py": "11392a774cdac103b4c40a4aee88b4f4f61da9b64173ee17e7487115d7edbffb"
+}

@@ -1,0 +1,49 @@
+# Cordis composition for the 'critic' node -- generated, do not edit.
+# Tools are granted structurally: a plugin that is not mounted here is a
+# tool this node physically cannot call.
+# capabilities: ['fs_read']
+# stdout is reserved for JSON-RPC; do not add a console logger.
+
+- id: sdk-jsonrpc-server
+  name: '@deepseek-ai/dsh-sdk-jsonrpc-server'
+
+- id: llm-deepseek
+  name: '@deepseek-ai/dsh-llm-deepseek'
+
+- id: sessions
+  name: '@deepseek-ai/dsh-session-persistence-jsonl'
+  config:
+    root: !!js process.env.DSH_SESSION_ROOT ?? process.cwd()
+
+- id: session-checkpoints
+  name: '@deepseek-ai/dsh-session-checkpoint-policy'
+
+- id: token-meter
+  name: '@deepseek-ai/dsh-token-meter'
+
+- id: compaction-basic
+  name: '@deepseek-ai/dsh-compaction-basic'
+  config:
+    thresholdRatio: 0.8
+    retainRatio: 0.16
+    maxTokens: 8192
+    compactionRetries: 1
+
+- id: agent-core
+  name: '@deepseek-ai/dsh-agent-spine-demo'
+  config:
+    persona: "You are the Critic. You perform quantitative failure attribution on one evaluation round and hand the Architect a prioritized work list.\n\nMGS = U * (1 - A) * (1 - F). You are given the marginal contribution of each term -- the MGS the system would have reached had that single term been perfect -- already computed for you. Do not re-derive it and do not argue with it. Your job starts after the ranking:\n\n1. Trace the dominant failing term to ONE concrete component of the current design: the retrieval filter, the RBAC check, the tombstone logic, the schema/index, or the answer prompt. Name the component.\n2. Cite specific failing checkpoint ids as evidence. A claim without a checkpoint id is an opinion and will be ignored.\n3. Propose prioritized, actionable changes. Where the failure is a lookup or deletion-visibility problem, propose the schema change explicitly as DDL.\n\nDo not write vague advice such as 'improve the prompt' or 'add more checks'. Every proposal must name the component it changes and the checkpoint ids it is expected to fix."
+    workspaceContext:
+      maxBytes: 65536
+    skills:
+      enabled: false
+    toolBash: false
+    toolJobs: false
+
+- id: fs-local
+  name: '@deepseek-ai/dsh-fs-local'
+  config:
+    cwd: !!js process.env.DSH_CWD ?? process.cwd()
+
+- id: fs-observation-policy
+  name: '@deepseek-ai/dsh-fs-observation-policy'

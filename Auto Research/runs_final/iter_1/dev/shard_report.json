@@ -1,0 +1,54 @@
+{
+  "n_shards": 2,
+  "n_failed": 0,
+  "n_skipped": 0,
+  "n_predictions": 20,
+  "circuit_breaker_signature": null,
+  "shards": [
+    {
+      "shard_index": 0,
+      "stage": "dev",
+      "iteration": 1,
+      "ok": true,
+      "skipped": false,
+      "n": 10,
+      "n_errors": 0,
+      "path": "/home/thaddus/Auto Research/runs_final/iter_1/dev/predictions.shard_0000.jsonl",
+      "phase_checkpoint_ids": [
+        "med_episode_rewrite_en_002_cardiology_afib_cardioversion_confidential_backup_ckpt_06",
+        "med_episode_rewrite_en_006_hyperkalemia_deleted_harbor_house_alias_ckpt_03",
+        "med_episode_rewrite_en_009_pe_deleted_willow_house_line_ckpt_01",
+        "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_08",
+        "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_09"
+      ],
+      "duration_s": 31.925,
+      "usage": {
+        "input_tokens": 4076,
+        "output_tokens": 771,
+        "total_tokens": 4847
+      },
+      "errors": []
+    },
+    {
+      "shard_index": 1,
+      "stage": "dev",
+      "iteration": 1,
+      "ok": true,
+      "skipped": false,
+      "n": 10,
+      "n_errors": 0,
+      "path": "/home/thaddus/Auto Research/runs_final/iter_1/dev/predictions.shard_0001.jsonl",
+      "phase_checkpoint_ids": [
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_02",
+        "med_episode_rewrite_en_016_early_pregnancy_deleted_haven_house_line_ckpt_02"
+      ],
+      "duration_s": 18.961,
+      "usage": {
+        "input_tokens": 1433,
+        "output_tokens": 439,
+        "total_tokens": 1872
+      },
+      "errors": []
+    }
+  ]
+}

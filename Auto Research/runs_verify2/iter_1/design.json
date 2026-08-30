@@ -1,0 +1,23 @@
+{
+  "targets_metric": "A (privacy_leakage_rate) and F (deletion_leakage_rate) \u2013 primary targets; U must remain above 0.85 to hit MGS \u2265 0.85.",
+  "expected_tradeoff": "Conservative sensitivity classification may slightly reduce U (e.g., routine queries containing 'hiv' become confidential and denied to non-clinicians), but this avoids catastrophic A increases. The multiplicative metric strongly favors lowering A and F over marginal U gains.",
+  "retrieval_loop": "Single SQL join of records with tombstones and role_grants. Gates in order: tombstone -> deny_tombstone; missing role_grants -> deny_rbac; relationship/scope check -> deny_scope; then relevance filtering via distinctive terms. Only records passing all gates are added to Decision.allowed. All denials and allows are logged to access_log.",
+  "forgetting_mechanism": "Tombstone creation + immediate shredding of encryption keys (for confidential) or in-place erasure of body text (routine/restricted). Deleted records retain an empty body and NULL key, so existence is known internally but nothing is recoverable; any delete request matched by content overlap is handled idempotently.",
+  "work_order": [
+    "Implement the SQLite schema as specified in schema_ddl (create tables and indexes).",
+    "Implement MemoryStore.initialize() to apply the DDL and seed DEFAULT_ROLE_GRANTS (patient, clinician, nurse, reception, pharmacist, scheduler, social_worker, lab_tech, family_member).",
+    "Implement sensitivity classification using regex markers (confidential/restricted markers).",
+    "Implement ingest_turn() to store records (encrypt confidential, plain text otherwise) and invoke _honor_deletion_request() when a delete phrase is detected.",
+    "Implement tombstone() and shred() \u2013 tombstone records, erase body or shred key, and make shredded=True. Ensure idempotency.",
+    "Implement retrieve() with the three-gate SQL join and relevance filtering, logging every decision.",
+    "Implement _relationship_ok() with covering-clinician inheritance and care_team pseudo-role.",
+    "Implement helper functions (distinctive_terms, xor_stream) for relevance and cryptography.",
+    "Implement Decision, Evidence dataclasses and the decision-to-action mapping in agent.py (sanitize_and_decide).",
+    "Implement GateMemAgent with reset/ingest/query lifecycle, including hidden-field stripping.",
+    "Run the provided tests (test_rbac, test_forgetting, test_deletion_scope) and fix any failures.",
+    "Performance gate: ensure all local tests pass and no leaks in manual adversarial queries."
+  ],
+  "prior_art": [],
+  "dev_failure_mitigations": null,
+  "responds_to_dev_failure": null
+}

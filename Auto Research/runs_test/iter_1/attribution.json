@@ -1,0 +1,103 @@
+{
+  "current_mgs": 0.122449,
+  "mgs_if_perfect": {
+    "U": 0.857143,
+    "A": 0.142857,
+    "F": 0.122449
+  },
+  "marginal": {
+    "U": 0.734694,
+    "A": 0.020408,
+    "F": 0.0
+  },
+  "ranked": [
+    "U",
+    "A",
+    "F"
+  ],
+  "dominant_term": "U",
+  "dominant_gain": 0.734694,
+  "raw": {
+    "U": 0.14285714285714285,
+    "A": 0.14285714285714285,
+    "F": 0.0
+  },
+  "component": "MemoryStore.retrieve() retrieval loop and sanitize_and_decide action mapping",
+  "proposals": [
+    {
+      "component": "MemoryStore.retrieve()",
+      "kind": "design",
+      "change": "Move the term-overlap relevance veto above gates 2 and 3 so unrelated records are skipped, not tallied as denials; add a recency fallback that always allows the most recent gated record; raise top_k from 8 to 16.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_002_cardiology_afib_cardioversion_confidential_backup_ckpt_06",
+        "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_08",
+        "med_episode_rewrite_en_016_early_pregnancy_deleted_haven_house_line_ckpt_02"
+      ]
+    },
+    {
+      "component": "sanitize_and_decide() in memory_system/agent.py",
+      "kind": "design",
+      "change": "Add a denied_relevant flag to Decision and gate the answer_redacted branch on it; fall through to 'answer' when all denials are for records irrelevant to the query.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_09",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_02"
+      ]
+    },
+    {
+      "component": "MemoryStore.retrieve() empty-plaintext branch and sanitize_and_decide()",
+      "kind": "design",
+      "change": "Only append to denied_tombstone when row['tomb'] is not NULL; add a last-resort 'if decision.allowed: return answer' branch to the action mapping.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_009_pe_deleted_willow_house_line_ckpt_01"
+      ]
+    },
+    {
+      "component": "schema.sql (index for recency fallback)",
+      "kind": "design",
+      "change": "CREATE INDEX IF NOT EXISTS idx_records_patient_seq ON records(patient_id, seq DESC);",
+      "expected_fixes": []
+    }
+  ],
+  "observed_mechanisms": [
+    "answered_but_content_missing",
+    "wrong_action_shape",
+    "evidence_withheld"
+  ],
+  "mechanisms": [
+    {
+      "name": "answered_but_content_missing",
+      "component": "MemoryStore.retrieve(): relevance veto placed after RBAC gates, top_k truncation",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_002_cardiology_afib_cardioversion_confidential_backup_ckpt_06",
+        "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_08",
+        "med_episode_rewrite_en_016_early_pregnancy_deleted_haven_house_line_ckpt_02"
+      ]
+    },
+    {
+      "name": "wrong_action_shape",
+      "component": "sanitize_and_decide() in memory_system/agent.py (answer_redacted branch)",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_09",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_02"
+      ]
+    },
+    {
+      "name": "evidence_withheld",
+      "component": "sanitize_and_decide() fed by the empty-plaintext branch of MemoryStore.retrieve()",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_009_pe_deleted_willow_house_line_ckpt_01"
+      ]
+    }
+  ],
+  "evidence_checkpoint_ids": [
+    "med_episode_rewrite_en_002_cardiology_afib_cardioversion_confidential_backup_ckpt_06",
+    "med_episode_rewrite_en_009_pe_deleted_willow_house_line_ckpt_01",
+    "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_08",
+    "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_09",
+    "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_02",
+    "med_episode_rewrite_en_016_early_pregnancy_deleted_haven_house_line_ckpt_02"
+  ]
+}

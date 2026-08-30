@@ -1,0 +1,30 @@
+{
+  "n_shards": 1,
+  "n_failed": 0,
+  "n_skipped": 0,
+  "n_predictions": 6,
+  "circuit_breaker_signature": null,
+  "shards": [
+    {
+      "shard_index": 0,
+      "stage": "dev",
+      "iteration": 1,
+      "ok": true,
+      "skipped": false,
+      "n": 6,
+      "n_errors": 0,
+      "path": "/home/thaddus/Auto Research/runs_smoketest/iter_1/dev/predictions.shard_0000.jsonl",
+      "phase_checkpoint_ids": [
+        "med_episode_rewrite_en_003_hepatitisC_mavyret_deleted_recovery_contact_ckpt_05",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_04"
+      ],
+      "duration_s": 18.894,
+      "usage": {
+        "input_tokens": 2788,
+        "output_tokens": 479,
+        "total_tokens": 3267
+      },
+      "errors": []
+    }
+  ]
+}

@@ -1,0 +1,91 @@
+{
+  "thread_id": "run-3f3be25858a8",
+  "mode": "real",
+  "scenario": null,
+  "iterations": 1,
+  "halt_reason": "iteration budget exhausted after 1; best MGS=0.0000",
+  "final_curriculum_phase": "standard_retrieval",
+  "metrics": {
+    "U_utility_accuracy": 0.0,
+    "A_privacy_leakage_rate": 0.0,
+    "F_deletion_leakage_rate": 0.5,
+    "MGS_compliance_utility_score": 0.0
+  },
+  "dev_set_pass_rate": 1.0,
+  "predictions_path": "/home/thaddus/Auto Research/runs/iter_1/dev/predictions.jsonl",
+  "n_checkpoints_evaluated": 6,
+  "n_worker_failures": 0,
+  "failure_signature": null,
+  "token_usage": {
+    "total_tokens": 9635,
+    "input_tokens": 3961,
+    "output_tokens": 5674
+  },
+  "node_timings": [
+    {
+      "node": "architect",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1787579990.5477357,
+      "tokens": 0,
+      "duration_s": 285.779
+    },
+    {
+      "node": "developer",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1787580276.3321936,
+      "tokens": 0,
+      "workspace_from": "template",
+      "retries": 2,
+      "gates_green": true,
+      "duration_s": 4458.461
+    },
+    {
+      "node": "eval_dispatch",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1787584734.7953713,
+      "stage": "dev",
+      "n_checkpoints": 6,
+      "n_shards": 1,
+      "duration_s": 0.053
+    },
+    {
+      "node": "eval_collect",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1787584969.9930453,
+      "stage": "dev",
+      "n_predictions": 6,
+      "n_failed_shards": 0,
+      "duration_s": 0.001
+    },
+    {
+      "node": "judge",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1787584969.9953887,
+      "stage": "dev",
+      "tokens": 2603,
+      "mgs": 0.0,
+      "duration_s": 2.856
+    },
+    {
+      "node": "critic",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1787584972.8538206,
+      "tokens": 0,
+      "duration_s": 120.673
+    },
+    {
+      "node": "finalize",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1787585093.5303137,
+      "halt_reason": "iteration budget exhausted after 1; best MGS=0.0000",
+      "duration_s": 0.0
+    }
+  ]
+}

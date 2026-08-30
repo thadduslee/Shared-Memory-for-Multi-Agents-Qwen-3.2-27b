@@ -1,0 +1,187 @@
+{
+  "thread_id": "run-348110069e7a",
+  "mode": "real",
+  "scenario": null,
+  "iterations": 3,
+  "halt_reason": "developer exhausted 5 retries (compile_ok=True tests_ok=True migration_ok=True)",
+  "final_curriculum_phase": "standard_retrieval",
+  "metrics": {
+    "U_utility_accuracy": 0.2857142857142857,
+    "A_privacy_leakage_rate": 0.14285714285714285,
+    "F_deletion_leakage_rate": 0.0,
+    "MGS_compliance_utility_score": 0.24489795918367346
+  },
+  "dev_unit_test_pass_rate": 1.0,
+  "dev_files_changed": [
+    "gatemem_adapter.py",
+    "memory_system/agent.py"
+  ],
+  "predictions_path": "",
+  "n_checkpoints_evaluated": 20,
+  "n_worker_failures": 0,
+  "failure_signature": "e4beda5ff48b916e",
+  "dev_failure_history": [
+    {
+      "iteration": 3,
+      "signature": "e4beda5ff48b916e",
+      "missing_gates": [],
+      "pass_rate": 1.0,
+      "retries_used": 5,
+      "error": "ImportError: cannot import name 'VALID_ACTIONS' from 'gatemem_adapter' (/home/thaddus/Auto Research/runs_test/iter_3/workspace/gatemem_adapter.py)"
+    }
+  ],
+  "token_usage": {
+    "total_tokens": 1220640,
+    "input_tokens": 1103441,
+    "output_tokens": 117199
+  },
+  "node_timings": [
+    {
+      "node": "architect",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1787994580.7214482,
+      "tokens": 28258,
+      "duration_s": 127.773
+    },
+    {
+      "node": "developer",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1787994708.5011773,
+      "turns": 17,
+      "tokens": 256658,
+      "workspace_from": "template",
+      "retries": 0,
+      "gates_green": true,
+      "files_changed": 2,
+      "duration_s": 68.275
+    },
+    {
+      "node": "eval_dispatch",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1787994776.778897,
+      "stage": "dev",
+      "n_checkpoints": 20,
+      "n_shards": 2,
+      "duration_s": 0.067
+    },
+    {
+      "node": "eval_collect",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1787994809.3361,
+      "stage": "dev",
+      "n_predictions": 20,
+      "n_failed_shards": 0,
+      "duration_s": 0.001
+    },
+    {
+      "node": "judge",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1787994809.3386004,
+      "stage": "dev",
+      "tokens": 8928,
+      "mgs": 0.12244897959183673,
+      "duration_s": 4.082
+    },
+    {
+      "node": "critic",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1787994813.423975,
+      "tokens": 25162,
+      "duration_s": 81.161
+    },
+    {
+      "node": "architect",
+      "iteration": 2,
+      "phase": "standard_retrieval",
+      "started_at": 1787994894.5895524,
+      "tokens": 33495,
+      "duration_s": 128.377
+    },
+    {
+      "node": "developer",
+      "iteration": 2,
+      "phase": "standard_retrieval",
+      "started_at": 1787995022.9721751,
+      "turns": 8,
+      "tokens": 135768,
+      "workspace_from": "iter_1",
+      "retries": 0,
+      "gates_green": true,
+      "files_changed": 3,
+      "duration_s": 46.504
+    },
+    {
+      "node": "eval_dispatch",
+      "iteration": 2,
+      "phase": "standard_retrieval",
+      "started_at": 1787995069.4790375,
+      "stage": "dev",
+      "n_checkpoints": 20,
+      "n_shards": 2,
+      "duration_s": 0.039
+    },
+    {
+      "node": "eval_collect",
+      "iteration": 2,
+      "phase": "standard_retrieval",
+      "started_at": 1787995104.1166885,
+      "stage": "dev",
+      "n_predictions": 20,
+      "n_failed_shards": 0,
+      "duration_s": 0.001
+    },
+    {
+      "node": "judge",
+      "iteration": 2,
+      "phase": "standard_retrieval",
+      "started_at": 1787995104.120114,
+      "stage": "dev",
+      "tokens": 8963,
+      "mgs": 0.24489795918367346,
+      "duration_s": 3.232
+    },
+    {
+      "node": "critic",
+      "iteration": 2,
+      "phase": "standard_retrieval",
+      "started_at": 1787995107.3548381,
+      "tokens": 26748,
+      "duration_s": 93.618
+    },
+    {
+      "node": "architect",
+      "iteration": 3,
+      "phase": "standard_retrieval",
+      "started_at": 1787995200.9774985,
+      "tokens": 29222,
+      "duration_s": 93.045
+    },
+    {
+      "node": "developer",
+      "iteration": 3,
+      "phase": "standard_retrieval",
+      "started_at": 1787995294.0280235,
+      "turns": 37,
+      "tokens": 649706,
+      "workspace_from": "iter_2",
+      "retries": 5,
+      "gates_green": true,
+      "files_changed": 2,
+      "duration_s": 273.177
+    },
+    {
+      "node": "finalize",
+      "iteration": 3,
+      "phase": "standard_retrieval",
+      "started_at": 1787995567.208209,
+      "halt_reason": "developer exhausted 5 retries (compile_ok=True tests_ok=True migration_ok=True)",
+      "duration_s": 0.0
+    }
+  ]
+}

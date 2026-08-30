@@ -1,0 +1,17 @@
+{
+  "targets_metric": "U (utility_accuracy)",
+  "expected_tradeoff": "Allowed rows may occasionally be irrelevant to the query, slightly reducing answer precision; the dominant effect is a large increase in U as previously filtered answer-bearing rows are now surfaced. A and F are expected to remain at current levels or improve slightly because allowed rows are still fully RBAC-gated and no forgetting logic is changed.",
+  "retrieval_loop": "In MemoryStore.retrieve(): (1) remove the lexical relevance filter for allowed rows so every row passing tombstone, RBAC, and scope gates is added to decision.allowed regardless of term overlap; (2) for rows that fail RBAC or scope and are NOT from the FTS index, require at least two shared distinctive terms before counting the denial, so marginal plain-scan rows do not trigger answer_redacted; (3) rows from FTS remain automatically responsive; (4) tombstone handling and all other gates are unchanged.",
+  "forgetting_mechanism": "Unchanged: each deletion request tombstones the matched records, removes them from the FTS index, overwrites plaintext bodies with '', and for confidential records shreds the associated crypto key (key_material = NULL) while keeping the ciphertext as an audit trail. Nothing here alters that path.",
+  "work_order": [
+    "In memory_system/store.py, inside MemoryStore.retrieve(), delete the block: `if terms and not (terms & _distinctive_terms(plaintext)): continue`.",
+    "Add a helper `_is_responsive_for_denial(record_id, plaintext, from_fts, terms)` that returns True if `record_id in from_fts` else returns `len(terms & _distinctive_terms(plaintext)) >= 2`.",
+    "In the loop, after computing plaintext, use that helper before appending to `denied_rbac` or `denied_scope`: only append if the row fails the gate AND `_is_responsive_for_denial(...)` is True. Otherwise skip the row silently.",
+    "Ensure the allowed path (both gates pass) unconditionally appends to `decision.allowed` and logs an 'allow' entry.",
+    "Keep tombstone and empty-plaintext handling exactly as before.",
+    "Run `pytest tests/` and the smoke runner; fix any breakage in the same file only."
+  ],
+  "prior_art": [],
+  "dev_failure_mitigations": null,
+  "responds_to_dev_failure": null
+}

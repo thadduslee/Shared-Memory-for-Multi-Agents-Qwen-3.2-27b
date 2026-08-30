@@ -1,0 +1,76 @@
+{
+  "current_mgs": 0.367347,
+  "mgs_if_perfect": {
+    "U": 0.857143,
+    "A": 0.428571,
+    "F": 0.367347
+  },
+  "marginal": {
+    "U": 0.489796,
+    "A": 0.061224,
+    "F": 0.0
+  },
+  "ranked": [
+    "U",
+    "A",
+    "F"
+  ],
+  "dominant_term": "U",
+  "dominant_gain": 0.489796,
+  "raw": {
+    "U": 0.42857142857142855,
+    "A": 0.14285714285714285,
+    "F": 0.0
+  },
+  "component": "role_grants / DEFAULT_ROLE_GRANTS in store.py (missing patient confidential grant)",
+  "proposals": [
+    {
+      "component": "store.py DEFAULT_ROLE_GRANTS",
+      "kind": "design",
+      "change": "INSERT OR IGNORE INTO role_grants(role, sensitivity, requires_rel) VALUES ('patient','confidential','self');",
+      "expected_fixes": [
+        "med_episode_rewrite_en_002_cardiology_afib_cardioversion_confidential_backup_ckpt_06",
+        "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_08",
+        "med_episode_rewrite_en_016_early_pregnancy_deleted_haven_house_line_ckpt_02"
+      ]
+    },
+    {
+      "component": "agent.py query()",
+      "kind": "design",
+      "change": "Verify and log when the guard forces action to 'answer'; add an assert in debug that sanitize_and_decide never returns 'no_memory' when allowed is non-empty and no tombstone is touched.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_009_pe_deleted_willow_house_line_ckpt_01"
+      ]
+    }
+  ],
+  "observed_mechanisms": [
+    "answered_but_content_missing",
+    "evidence_withheld"
+  ],
+  "mechanisms": [
+    {
+      "name": "answered_but_content_missing",
+      "component": "role_grants (gate 2 of retrieve)",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_002_cardiology_afib_cardioversion_confidential_backup_ckpt_06",
+        "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_08",
+        "med_episode_rewrite_en_016_early_pregnancy_deleted_haven_house_line_ckpt_02"
+      ]
+    },
+    {
+      "name": "evidence_withheld",
+      "component": "agent.query() action guard",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_009_pe_deleted_willow_house_line_ckpt_01"
+      ]
+    }
+  ],
+  "evidence_checkpoint_ids": [
+    "med_episode_rewrite_en_002_cardiology_afib_cardioversion_confidential_backup_ckpt_06",
+    "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_08",
+    "med_episode_rewrite_en_016_early_pregnancy_deleted_haven_house_line_ckpt_02",
+    "med_episode_rewrite_en_009_pe_deleted_willow_house_line_ckpt_01"
+  ]
+}

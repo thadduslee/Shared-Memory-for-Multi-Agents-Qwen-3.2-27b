@@ -1,0 +1,100 @@
+{
+  "current_mgs": 0.285714,
+  "mgs_if_perfect": {
+    "U": 1.0,
+    "A": 0.285714,
+    "F": 0.285714
+  },
+  "marginal": {
+    "U": 0.714286,
+    "A": 0.0,
+    "F": 0.0
+  },
+  "ranked": [
+    "U",
+    "A",
+    "F"
+  ],
+  "dominant_term": "U",
+  "dominant_gain": 0.714286,
+  "raw": {
+    "U": 0.2857142857142857,
+    "A": 0.0,
+    "F": 0.0
+  },
+  "component": "memory_system/agent.py::sanitize_and_decide + memory_system/store.py::retrieve denied-accounting",
+  "proposals": [
+    {
+      "component": "store.py::retrieve Gate 2/3 + agent.py::sanitize_and_decide",
+      "kind": "design",
+      "change": "Count only query-responsive records (shared distinctive terms, or empty query) toward denied_rbac/denied_scope; log off-topic denials as deny_rbac_unrelated and skip the counter. Keep tombstone hits unconditional so touched_deleted still forces no_memory. No DDL.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_09",
+        "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_08",
+        "med_episode_rewrite_en_016_early_pregnancy_deleted_haven_house_line_ckpt_02",
+        "med_episode_rewrite_en_002_cardiology_afib_cardioversion_confidential_backup_ckpt_06"
+      ]
+    },
+    {
+      "component": "agent.py::query LLM override",
+      "kind": "design",
+      "change": "Clamp the model-emitted action: when sanitize_and_decide returns 'answer', disallow model action of 'no_memory'/'refuse'; cap the override at 'answer_redacted'. Blocks authorized-query refusals.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_009_pe_deleted_willow_house_line_ckpt_01",
+        "med_episode_rewrite_en_002_cardiology_afib_cardioversion_confidential_backup_ckpt_06",
+        "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_08",
+        "med_episode_rewrite_en_016_early_pregnancy_deleted_haven_house_line_ckpt_02"
+      ]
+    },
+    {
+      "component": "harness answer prompt / model (not in artifact)",
+      "kind": "infrastructure",
+      "change": "The model was handed 8/8/4 gated evidence records and cited 2\u20134, dropping required content. Strengthen the answer prompt to require exhaustive coverage of every evidence record, or use a more capable model.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_002_cardiology_afib_cardioversion_confidential_backup_ckpt_06",
+        "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_08",
+        "med_episode_rewrite_en_016_early_pregnancy_deleted_haven_house_line_ckpt_02"
+      ]
+    }
+  ],
+  "observed_mechanisms": [
+    "answered_but_content_missing",
+    "evidence_withheld",
+    "wrong_action_shape"
+  ],
+  "mechanisms": [
+    {
+      "name": "wrong_action_shape",
+      "component": "store.py::retrieve Gate 2/3 counters + agent.py::sanitize_and_decide rule 3",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_09"
+      ]
+    },
+    {
+      "name": "answered_but_content_missing",
+      "component": "agent.py::sanitize_and_decide rule 3 (label) + agent.py::query LLM answerer (content)",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_002_cardiology_afib_cardioversion_confidential_backup_ckpt_06",
+        "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_08",
+        "med_episode_rewrite_en_016_early_pregnancy_deleted_haven_house_line_ckpt_02"
+      ]
+    },
+    {
+      "name": "evidence_withheld",
+      "component": "agent.py::query LLM action override (line: action = str(rendered.get(\"action\") or action))",
+      "kind": "infrastructure",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_009_pe_deleted_willow_house_line_ckpt_01"
+      ]
+    }
+  ],
+  "evidence_checkpoint_ids": [
+    "med_episode_rewrite_en_002_cardiology_afib_cardioversion_confidential_backup_ckpt_06",
+    "med_episode_rewrite_en_009_pe_deleted_willow_house_line_ckpt_01",
+    "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_08",
+    "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_09",
+    "med_episode_rewrite_en_016_early_pregnancy_deleted_haven_house_line_ckpt_02"
+  ]
+}

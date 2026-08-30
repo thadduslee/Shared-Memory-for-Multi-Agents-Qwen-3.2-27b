@@ -1,0 +1,26 @@
+{
+  "targets_metric": "U",
+  "expected_tradeoff": "Zero. These changes raise U without weakening RBAC (denials still occur, only irrelevant ones are ignored), without weakening deletion (tombstones and shredding untouched), and without opening a new injection surface (the agent still only sees gated evidence and never lets input control the action). A and F are unaffected.",
+  "retrieval_loop": "The retrieval pipeline stays: (1) FTS5 candidate short-list, (2) fallback patient-scoped scan if no FTS hits, (3) tombstone gate -> role grant gate -> relationship/scope gate, (4) relevance filter on allowed rows. The change is that the relevance filter now also applies to rows that fail the RBAC or scope gates: we compute plaintext (decrypting if needed) and skip the row entirely (no denial, no audit log) if it shares no distinctive terms with the query. This makes `touched_unauthorized` true only for denials that actually matter to the question.",
+  "forgetting_mechanism": "Unchanged. Tombstones remain the deletion authority, bodies are overwritten to empty for plaintext rows, crypto keys are shredded and NULLed for confidential rows, and FTS entries are removed. The `no_memory` action continues to be driven by `denied_tombstone`. No part of this iteration touches deletion or key destruction.",
+  "work_order": [
+    {
+      "file": "memory_system/store.py",
+      "function": "MemoryStore.retrieve",
+      "change": "Inside the per-row loop, compute plaintext (row['body'] or decryption) BEFORE the RBAC/scope gates. After computing plaintext, if the query terms are non-empty and the row shares no distinctive term, `continue` without logging a denial. Then run gates 2 and 3 as before, but only append to `denied_rbac`/`denied_scope` and log when the gate actually denies a relevant row."
+    },
+    {
+      "file": "memory_system/agent.py",
+      "function": "GateMemAgent.query",
+      "change": "Remove the line `action = str(rendered.get(\"action\") or action)` so the LLM can never override the action returned by `sanitize_and_decide`. Keep the `llm` call only for answer text if desired, but never for the action."
+    },
+    {
+      "file": "memory_system/agent.py",
+      "function": "GateMemAgent.query",
+      "change": "Replace the answer-generation block for actions `answer` and `answer_redacted` with a hard-coded concatenation: `answer = \" \".join(e.body for e in decision.allowed)`. Remove the dependence on the LLM for answer content (or keep the LLM only for optional phrasing, but guarantee verbatim content regardless). The `refuse` and `no_memory` branches stay unchanged."
+    }
+  ],
+  "prior_art": [],
+  "dev_failure_mitigations": null,
+  "responds_to_dev_failure": null
+}

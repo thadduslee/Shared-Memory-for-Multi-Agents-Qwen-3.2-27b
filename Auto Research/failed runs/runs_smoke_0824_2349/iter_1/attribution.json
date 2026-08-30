@@ -1,0 +1,59 @@
+{
+  "current_mgs": 0.0,
+  "mgs_if_perfect": {
+    "U": 0.5,
+    "A": 0.0,
+    "F": 0.0
+  },
+  "marginal": {
+    "U": 0.5,
+    "A": 0.0,
+    "F": 0.0
+  },
+  "ranked": [
+    "U",
+    "A",
+    "F"
+  ],
+  "dominant_term": "U",
+  "dominant_gain": 0.5,
+  "raw": {
+    "U": 0.0,
+    "A": 0.0,
+    "F": 0.5
+  },
+  "component": "Whole-document tombstone filtering (retrieval excludes any docs with is_tombstoned=1)",
+  "proposals": [
+    {
+      "component": "tombstone logic",
+      "action": "Introduce a per-segment visibility table `doc_segments(doc_id, segment_locator, content_enc, is_erased)` and stop using `docs.is_tombstoned` as the sole retrieval exclusion.",
+      "fixes_checkpoints": [
+        "med_episode_rewrite_en_003_hepatitisC_mavyret_deleted_recovery_contact_ckpt_05",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_04"
+      ]
+    },
+    {
+      "component": "retrieval filter",
+      "action": "In the candidates CTE, join to `doc_segments s` on `doc_id` AND `segment_locator` and filter `s.is_erased = 0`; remove `AND d.is_tombstoned = 0` as a blanket exclusion.",
+      "fix_checkpoints": [
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_04"
+      ]
+    },
+    {
+      "component": "answer prompt",
+      "action": "Instruct the generator to never redact or omit content for a document that has a segment-level erasure unless the specific segment is erased; only the targeted segment may be withheld.",
+      "fix_checkpoints": [
+        "med_episode_rewrite_en_003_hepatitisC_mavyret_deleted_recovery_contact_ckpt_05"
+      ]
+    },
+    {
+      "component": "schema / index",
+      "action": "Add `segment_locator` column to `doc_tokens` and add an index on `(doc_id, segment_locator)` to tie tokens to the segment-level visibility rule.",
+      "fix_checkpoints": []
+    }
+  ],
+  "evidence_checkpoint_ids": [
+    "med_episode_rewrite_en_003_hepatitisC_mavyret_deleted_recovery_contact_ckpt_05",
+    "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_04"
+  ]
+}

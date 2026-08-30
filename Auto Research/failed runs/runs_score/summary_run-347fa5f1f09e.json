@@ -1,0 +1,53 @@
+{
+  "thread_id": "run-347fa5f1f09e",
+  "mode": "real",
+  "scenario": null,
+  "iterations": 1,
+  "halt_reason": "developer exhausted 3 retries (compile_ok=False tests_ok=False migration_ok=False)",
+  "final_curriculum_phase": "standard_retrieval",
+  "metrics": {
+    "U_utility_accuracy": 0.0,
+    "A_privacy_leakage_rate": 1.0,
+    "F_deletion_leakage_rate": 1.0,
+    "MGS_compliance_utility_score": 0.0
+  },
+  "dev_set_pass_rate": 0.0,
+  "predictions_path": "",
+  "n_checkpoints_evaluated": 0,
+  "n_worker_failures": 0,
+  "failure_signature": "c37a8a382bf46b87",
+  "token_usage": {
+    "total_tokens": 0,
+    "input_tokens": 0,
+    "output_tokens": 0
+  },
+  "node_timings": [
+    {
+      "node": "architect",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1787622838.7823443,
+      "tokens": 0,
+      "duration_s": 764.741
+    },
+    {
+      "node": "developer",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1787623603.5294707,
+      "tokens": 0,
+      "workspace_from": "existing",
+      "retries": 3,
+      "gates_green": false,
+      "duration_s": 5495.583
+    },
+    {
+      "node": "finalize",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1787629099.1135967,
+      "halt_reason": "developer exhausted 3 retries (compile_ok=False tests_ok=False migration_ok=False)",
+      "duration_s": 0.0
+    }
+  ]
+}

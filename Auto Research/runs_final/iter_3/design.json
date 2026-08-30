@@ -1,0 +1,15 @@
+{
+  "targets_metric": "U",
+  "expected_tradeoff": "The changes raise U by fixing retrieval/answerer defects with negligible effect on A or F. The responsiveness bar only reclassifies which denials influence the action; denied records are still never released, so A stays 0.0. The coverage any\u2192all and clamp normalization are strictly coverage- and action-preserving in the allowed direction. The only theoretical risk is a genuinely relevant sparse denial being missed, but the benchmark's token-collision pattern makes that implausible, and it is preferable to the current over-redaction that suppresses utility.",
+  "retrieval_loop": "retrieve() keeps the three-gate order (tombstone \u2192 role grant \u2192 relationship/scope) and the scored top-k ranking. Two changes: (1) in Gates 2 and 3, a denied record is counted as a policy denial only if it shares at least min(2, len(query_terms)) distinctive tokens with the query; sub-threshold records are still audit-logged as deny_rbac/deny_scope but are treated as off-topic and do not set touched_unauthorized. (2) The allowed-path overlap check (>0) is unchanged so sparse queries still retrieve useful records.",
+  "forgetting_mechanism": "Unchanged: tombstone-first, cryptographic shredding for confidential records, in-place body erase for routine records, idempotent tombstone(), and existence-asymmetry for yes/no probes. No modifications are needed; F and A are already 0.0.",
+  "work_order": [
+    "In memory_system/agent.py, in GateMemAgent.query, replace the coverage-loop guard `if body_terms and not any(t in lower_answer for t in body_terms):` with `if body_terms and not all(t in lower_answer for t in body_terms):`.",
+    "In memory_system/store.py, in MemoryStore.retrieve, modify Gate 2 (role grant) and Gate 3 (relationship/scope) denial accounting: compute `overlap = len(terms & record_terms) if terms else 0`, and change the off-topic condition from `if terms and not (terms & record_terms):` to `if terms and overlap < min(2, len(terms)):`. Keep the audit-log `deny_rbac`/`deny_scope` call before the `continue`.",
+    "In memory_system/agent.py, in GateMemAgent.query, change the model_action clamp to normalize with `.strip().lower()` and whitelist: when base_action is 'answer', any model_action not in {'answer','answer_redacted'} is forced to 'answer'; when base_action is 'answer_redacted', any not in that set is forced to 'answer_redacted'.",
+    "Run the local test suite (pytest tests/) and confirm all tests pass; then manually exercise the three affected checkpoint types via _smoke_runner to verify actions and content coverage."
+  ],
+  "prior_art": [],
+  "dev_failure_mitigations": null,
+  "responds_to_dev_failure": null
+}

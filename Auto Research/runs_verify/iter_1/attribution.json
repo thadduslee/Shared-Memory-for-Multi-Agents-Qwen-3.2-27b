@@ -1,0 +1,80 @@
+{
+  "current_mgs": 0.0,
+  "mgs_if_perfect": {
+    "U": 1.0,
+    "A": 0.0,
+    "F": 0.0
+  },
+  "marginal": {
+    "U": 1.0,
+    "A": 0.0,
+    "F": 0.0
+  },
+  "ranked": [
+    "U",
+    "A",
+    "F"
+  ],
+  "dominant_term": "U",
+  "dominant_gain": 1.0,
+  "raw": {
+    "U": 0.0,
+    "A": 0.0,
+    "F": 0.0
+  },
+  "component": "retrieve() relevance hard-drop (memory_system/store.py)",
+  "proposals": [
+    {
+      "component": "retrieve() relevance filter (memory_system/store.py)",
+      "kind": "design",
+      "change": "Replace `if terms and score <= 0.0: continue` with an unconditional `candidates.append((score, int(row[\"seq\"]), row, plaintext))`. The existing sort (score DESC, seq DESC) ranks 0-scorers last and the subsequent `candidates[:top_k]` fills the tail by recency, so a gate-cleared record that shares no distinctive token with the query still reaches `allowed` instead of being silently dropped. Gates 1-3 run before this line, preserving A and F.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_009_pe_deleted_willow_house_line_ckpt_01",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_02",
+        "med_episode_rewrite_en_016_early_pregnancy_deleted_haven_house_line_ckpt_02",
+        "med_episode_rewrite_en_002_cardiology_afib_cardioversion_confidential_backup_ckpt_06",
+        "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_08",
+        "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_09"
+      ]
+    },
+    {
+      "component": "retrieve() deny-list construction + sanitize_and_decide branch (memory_system/store.py gates 2/3, memory_system/agent.py)",
+      "kind": "design",
+      "change": "In store.py gate 2 (`if row[\"requires_rel\"] is None`) and gate 3 (`if not self._relationship_ok(...)`), append to `denied_rbac`/`denied_scope` only when the record is responsive to the query (`_distinctive_terms(plaintext) & terms` is non-empty). This keeps `sanitize_and_decide`'s `answer_redacted` branch from firing on irrelevant denials and lets an otherwise-complete authorized answer be labeled `answer`.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_006_hyperkalemia_deleted_harbor_house_alias_ckpt_03"
+      ]
+    }
+  ],
+  "observed_mechanisms": [
+    "answered_but_content_missing",
+    "wrong_action_shape"
+  ],
+  "mechanisms": [
+    {
+      "name": "answered_but_content_missing",
+      "component": "retrieve() relevance filter (memory_system/store.py): `if terms and score <= 0.0: continue` dropping gate-cleared records that share no distinctive query token",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_002_cardiology_afib_cardioversion_confidential_backup_ckpt_06",
+        "med_episode_rewrite_en_009_pe_deleted_willow_house_line_ckpt_01",
+        "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_08",
+        "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_09",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_02",
+        "med_episode_rewrite_en_016_early_pregnancy_deleted_haven_house_line_ckpt_02"
+      ]
+    },
+    {
+      "name": "wrong_action_shape",
+      "component": "sanitize_and_decide answer_redacted branch (memory_system/agent.py) over-fires because retrieve() appends deny lists (store.py gates 2/3) before relevance is computed, so irrelevant denied records force redaction",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_006_hyperkalemia_deleted_harbor_house_alias_ckpt_03"
+      ]
+    }
+  ],
+  "evidence_checkpoint_ids": [
+    "med_episode_rewrite_en_009_pe_deleted_willow_house_line_ckpt_01",
+    "med_episode_rewrite_en_006_hyperkalemia_deleted_harbor_house_alias_ckpt_03"
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "current_mgs": 0.142857,
+  "mgs_if_perfect": {
+    "U": 1.0,
+    "A": 0.142857,
+    "F": 0.142857
+  },
+  "marginal": {
+    "U": 0.857143,
+    "A": 0.0,
+    "F": 0.0
+  },
+  "ranked": [
+    "U",
+    "A",
+    "F"
+  ],
+  "dominant_term": "U",
+  "dominant_gain": 0.857143,
+  "raw": {
+    "U": 0.14285714285714285,
+    "A": 0.0,
+    "F": 0.0
+  },
+  "component": "retrieval_filter",
+  "proposals": [
+    {
+      "component": "retrieval_filter",
+      "kind": "code_change",
+      "change": "In MemoryStore.retrieve(), remove the `responsive` filtering step. Sort the entire `candidates` list (which already contains all gate-cleared records) by (relevance_score, seq) descending, and take the first `top_k` as `decision.allowed`. The `_is_responsive` helper remains only for deny tally counting, not for allowed selection.",
+      "expected_fixes": [
+        "all 6 failing checkpoints"
+      ]
+    },
+    {
+      "component": "retrieval_filter",
+      "kind": "fallback",
+      "change": "Consider raising `top_k` from 8 to at least 20 to ensure the unfiltered candidate set covers all relevant records, in case many unrelated gate-cleared records exist.",
+      "expected_fixes": [
+        "backstop for any remaining surfaced-content misses"
+      ]
+    }
+  ],
+  "observed_mechanisms": [
+    "answered_but_content_missing"
+  ],
+  "mechanisms": [
+    {
+      "name": "answered_but_content_missing",
+      "component": "retrieval_filter",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_002_cardiology_afib_cardioversion_confidential_backup_ckpt_06",
+        "med_episode_rewrite_en_009_pe_deleted_willow_house_line_ckpt_01",
+        "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_08",
+        "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_09",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_02",
+        "med_episode_rewrite_en_016_early_pregnancy_deleted_haven_house_line_ckpt_02"
+      ]
+    }
+  ],
+  "evidence_checkpoint_ids": [
+    "med_episode_rewrite_en_002_cardiology_afib_cardioversion_confidential_backup_ckpt_06",
+    "med_episode_rewrite_en_009_pe_deleted_willow_house_line_ckpt_01",
+    "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_08",
+    "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_09",
+    "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_02",
+    "med_episode_rewrite_en_016_early_pregnancy_deleted_haven_house_line_ckpt_02"
+  ]
+}

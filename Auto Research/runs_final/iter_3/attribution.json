@@ -1,0 +1,76 @@
+{
+  "current_mgs": 0.428571,
+  "mgs_if_perfect": {
+    "U": 1.0,
+    "A": 0.428571,
+    "F": 0.428571
+  },
+  "marginal": {
+    "U": 0.571429,
+    "A": 0.0,
+    "F": 0.0
+  },
+  "ranked": [
+    "U",
+    "A",
+    "F"
+  ],
+  "dominant_term": "U",
+  "dominant_gain": 0.571429,
+  "raw": {
+    "U": 0.42857142857142855,
+    "A": 0.0,
+    "F": 0.0
+  },
+  "component": "agent.py::GateMemAgent.query (answer-coverage guarantee loop)",
+  "proposals": [
+    {
+      "component": "agent.py::GateMemAgent.query (answer-coverage guard)",
+      "kind": "design",
+      "change": "Replace `_distinctive_terms(e.body)` in the coverage check with a numeric-aware `_coverage_terms` that also yields clock-time tokens (\\b\\d{1,2}:\\d{2}(?: ?[ap]m)?\\b) and 1-2 digit day tokens (\\b\\d{1,2}\\b); keep the `not all(... in lower_answer)` guard so any missing numeric detail forces `answer += ' Additionally: ' + e.body`. No store.py change.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_002_cardiology_afib_cardioversion_confidential_backup_ckpt_06",
+        "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_08",
+        "med_episode_rewrite_en_016_early_pregnancy_deleted_haven_house_line_ckpt_02"
+      ]
+    },
+    {
+      "component": "agent.py::GateMemAgent.query (model_action clamp)",
+      "kind": "design",
+      "change": "Do not rewrite the clamp; it already strips/lowers and whitelists to {answer, answer_redacted}, so `no_memory` is unreachable for allowed=4 with zero denials. Re-run med_episode_rewrite_en_009_pe_deleted_willow_house_line_ckpt_01 against the inlined code; if it still returns no_memory, instrument `rendered.get('action')` before the clamp to find the path, otherwise treat the recorded prediction as stale.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_009_pe_deleted_willow_house_line_ckpt_01"
+      ]
+    }
+  ],
+  "observed_mechanisms": [
+    "answered_but_content_missing",
+    "evidence_withheld"
+  ],
+  "mechanisms": [
+    {
+      "name": "answered_but_content_missing",
+      "component": "agent.py::GateMemAgent.query coverage loop + store.py::_distinctive_terms tokenizer (numeric tokens dropped by [a-z0-9][a-z0-9\\-']{2,})",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_002_cardiology_afib_cardioversion_confidential_backup_ckpt_06",
+        "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_08",
+        "med_episode_rewrite_en_016_early_pregnancy_deleted_haven_house_line_ckpt_02"
+      ]
+    },
+    {
+      "name": "evidence_withheld",
+      "component": "agent.py::GateMemAgent.query (model_action clamp + sanitize_and_decide)",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_009_pe_deleted_willow_house_line_ckpt_01"
+      ]
+    }
+  ],
+  "evidence_checkpoint_ids": [
+    "med_episode_rewrite_en_002_cardiology_afib_cardioversion_confidential_backup_ckpt_06",
+    "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_08",
+    "med_episode_rewrite_en_016_early_pregnancy_deleted_haven_house_line_ckpt_02",
+    "med_episode_rewrite_en_009_pe_deleted_willow_house_line_ckpt_01"
+  ]
+}

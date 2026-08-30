@@ -1,0 +1,72 @@
+{
+  "thread_id": "run-6b4bb1167f72",
+  "mode": "real",
+  "scenario": null,
+  "iterations": 2,
+  "halt_reason": "wall-clock budget exhausted: 21869s > 21600s",
+  "final_curriculum_phase": "standard_retrieval",
+  "metrics": {
+    "U_utility_accuracy": 0.0,
+    "A_privacy_leakage_rate": 1.0,
+    "F_deletion_leakage_rate": 1.0,
+    "MGS_compliance_utility_score": 0.0
+  },
+  "dev_set_pass_rate": 1.0,
+  "predictions_path": "",
+  "n_checkpoints_evaluated": 0,
+  "n_worker_failures": 0,
+  "failure_signature": null,
+  "token_usage": {
+    "total_tokens": 0,
+    "input_tokens": 0,
+    "output_tokens": 0
+  },
+  "node_timings": [
+    {
+      "node": "architect",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1787586657.322126,
+      "tokens": 0,
+      "duration_s": 231.832
+    },
+    {
+      "node": "developer",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1787586889.1596017,
+      "tokens": 0,
+      "workspace_from": "template",
+      "retries": 5,
+      "gates_green": false,
+      "duration_s": 17585.809
+    },
+    {
+      "node": "architect",
+      "iteration": 2,
+      "phase": "standard_retrieval",
+      "started_at": 1787604474.9706824,
+      "tokens": 0,
+      "duration_s": 233.002
+    },
+    {
+      "node": "developer",
+      "iteration": 2,
+      "phase": "standard_retrieval",
+      "started_at": 1787604707.9878845,
+      "tokens": 0,
+      "workspace_from": "iter_1",
+      "retries": 2,
+      "gates_green": true,
+      "duration_s": 3818.401
+    },
+    {
+      "node": "finalize",
+      "iteration": 2,
+      "phase": "standard_retrieval",
+      "started_at": 1787608526.391235,
+      "halt_reason": "wall-clock budget exhausted: 21869s > 21600s",
+      "duration_s": 0.0
+    }
+  ]
+}

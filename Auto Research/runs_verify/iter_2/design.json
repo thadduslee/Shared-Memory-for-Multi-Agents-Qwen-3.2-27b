@@ -1,0 +1,18 @@
+{
+  "targets_metric": "U",
+  "expected_tradeoff": "U increases without affecting A or F. The relevance change only adds gate-cleared records that were previously dropped; the deny-tally change only removes irrelevant denials from the counters that influence action labeling. Neither widens the authorized set, so A remains stable. Deletion logic is untouched, so F remains stable.",
+  "retrieval_loop": "In MemoryStore.retrieve(), remove the hard relevance drop and make deny-tally appends responsive-aware. Concretely:\n  - Replace `score = _relevance_score(...); if terms and score <= 0.0: continue` with an unconditional append to candidates.\n  - In gate 2 (requires_rel is None) and gate 3 (relationship not ok), before appending to denied_rbac/denied_scope, compute the record's plaintext (decrypt if necessary) and check whether it shares at least one distinctive term with the query. If it does not, skip the append and do not log a denial. The sort by (score, seq) and caps at top_k remain unchanged.",
+  "forgetting_mechanism": "No changes. Existing tombstones, in-place body erasure for routine records, and key shredding for confidential records continue to guarantee active forgetting and pass the 'deleted content is not retrievable' tests. The modifications do not touch any deletion path.",
+  "work_order": [
+    "Edit memory_system/store.py: in retrieve(), remove the line `if terms and score <= 0.0: continue` and make the following line unconditional. (Alternative: keep the score calculation but always append to candidates.)",
+    "Edit memory_system/store.py: add a helper `_is_responsive(row, terms)` that returns True if the record's plaintext shares at least one distinctive term with the query. For confidential records, decrypt using the stored key_id/ciphertext (key_id is available); for routine records use body. Handle empty plaintext (e.g., body already wiped) as non-responsive.",
+    "In gate 2 (the `if row['requires_rel'] is None:` branch), replace `decision.denied_rbac.append(record_id)` and `self._log(... 'deny_rbac')` with a conditional call to `_is_responsive`; only if responsive, append and log.",
+    "In gate 3 (the `if not self._relationship_ok(...)` branch), do the same conditional append and log for `denied_scope`.",
+    "Run `pytest tests/` to confirm all existing tests still pass (test_rbac.py, test_forgetting.py, test_deletion_scope.py).",
+    "Run `python _smoke_runner.py` (or equivalent smoke test) to ensure no crashes on sample checkpoints.",
+    "Optionally run a partial shard evaluation on the previously failing checkpoint IDs to verify the fixes before full eval."
+  ],
+  "prior_art": [],
+  "dev_failure_mitigations": null,
+  "responds_to_dev_failure": null
+}

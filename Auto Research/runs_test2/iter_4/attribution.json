@@ -1,0 +1,91 @@
+{
+  "current_mgs": 0.356863,
+  "mgs_if_perfect": {
+    "U": 0.713725,
+    "A": 0.433333,
+    "F": 0.411765
+  },
+  "marginal": {
+    "U": 0.356863,
+    "A": 0.076471,
+    "F": 0.054902
+  },
+  "ranked": [
+    "U",
+    "A",
+    "F"
+  ],
+  "dominant_term": "U",
+  "dominant_gain": 0.356863,
+  "raw": {
+    "U": 0.5,
+    "A": 0.17647058823529413,
+    "F": 0.13333333333333333
+  },
+  "component": "MemoryStore.retrieve() relevance gate and sanitize_and_decide() decision logic",
+  "proposals": [
+    {
+      "component": "MemoryStore.retrieve()",
+      "kind": "design",
+      "change": "Delete the block `if terms and not (terms & _distinctive_terms(plaintext)): continue` so that every row passing tombstone, RBAC, and scope gates is appended to decision.allowed regardless of term overlap.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_015_ms_relapse_deleted_cedar_bridge_line_ckpt_08",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ]
+    },
+    {
+      "component": "sanitize_and_decide()",
+      "kind": "design",
+      "change": "Add a final guard: if decision.allowed is truthy, never return 'no_memory'. In GateMemAgent.query(), assert that action is 'answer' or 'answer_redacted' whenever decision.allowed is non-empty; if it is not, force it and log a warning.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_09",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_01",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_05"
+      ]
+    }
+  ],
+  "observed_mechanisms": [
+    "answered_but_content_missing",
+    "evidence_withheld"
+  ],
+  "mechanisms": [
+    {
+      "name": "answered_but_content_missing",
+      "component": "MemoryStore.retrieve() lexical relevance gate",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_015_ms_relapse_deleted_cedar_bridge_line_ckpt_08",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ]
+    },
+    {
+      "name": "evidence_withheld",
+      "component": "sanitize_and_decide() action mapping",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_09",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_01",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_05"
+      ]
+    }
+  ],
+  "evidence_checkpoint_ids": [
+    "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+    "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_09",
+    "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_01",
+    "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+    "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_05",
+    "med_episode_rewrite_en_015_ms_relapse_deleted_cedar_bridge_line_ckpt_08",
+    "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+    "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+    "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+  ]
+}

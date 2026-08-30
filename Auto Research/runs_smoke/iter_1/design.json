@@ -1,0 +1,21 @@
+{
+  "targets_metric": "F (deletion_leakage_rate): moves from 1.0 toward ~0.02 by making forgetting concept-anchored and persistent across ingest, retrieve, and any post-hoc scan.",
+  "expected_tradeoff": "U loses ~0-2 points: a fact the patient explicitly asked to forget stays suppressed even if a later authorized note mentions it \u2014 correct behavior, minor utility cost. A stays 0: the denylist suppresses for everyone and adds no new grants, so access-control violation rate does not rise. Net MGS rises sharply because (1-F) stops zeroing the product.",
+  "retrieval_loop": "retrieve() iterates records joined LEFT JOIN tombstones and LEFT JOIN role_grants, now with two deletion checks before any RBAC: gate 0 flags a tombstone row; gate 0b decrypts the plaintext (if any) and flags it denied_tombstone when its distinctive terms overlap the episode's forgotten_facts denylist by >= 2. Only after both are clean does gate 1 check the role grant and gate 2 the relationship + scope. Any denylist or tombstone hit is logged 'deny_tombstone', so sanitize_and_decide still returns no_memory instead of a partial answer \u2014 preventing split_reconstruction and confirm_yes_no.",
+  "forgetting_mechanism": "Two-layer active forgetting. (1) Term-based denylist: every honored deletion request inserts its distinctive terms into forgotten_facts; ingest_turn tombstones any new record that overlaps the denylist (re-presentation), retrieve() suppresses any overlapping record for every requester. (2) Irreversible layer retained and now also term-anchored: tombstone() wipes body='' for plaintext rows and, for confidential rows, shreds crypto_keys.key_material so _decrypt returns None permanently; tombstone is idempotent and now additionally records the wiped plaintext's terms in forgotten_facts so matching is concept-anchored even without an explicit re-request.",
+  "work_order": [
+    "memory_system/schema.sql: append the forgotten_facts table and the two indexes from migration_sql; keep all existing DDL untouched.",
+    "memory_system/store.py: add module constant MIGRATION_SQL containing the migration text above and bump SCHEMA_VERSION to 2.",
+    "memory_system/store.py __init__: after initialize(), call self.apply_migration(MIGRATION_SQL) so every fresh store builds the denylist tables.",
+    "memory_system/store.py: add _forgotten_terms(episode_id) -> set[str] loading forgotten_facts.terms_json for the episode and returning the union of terms.",
+    "memory_system/store.py: add _record_matches_forgotten(episode_id, plaintext) -> bool returning len(overlap) >= 2 against _forgotten_terms.",
+    "memory_system/store.py _honor_deletion_request: after computing hits, INSERT the request's distinctive terms into forgotten_facts (terms_json serialized); keep existing per-record tombstoning.",
+    "memory_system/store.py ingest_turn: after inserting the turn's record and before returning, if _record_matches_forgotten(episode_id, text) then self.tombstone(record_id, requested_by, reason='reingested deleted fact').",
+    "memory_system/store.py retrieve: in the scan loop, decrypt plaintext before the RBAC gate; if _record_matches_forgotten(episode_id, plaintext) is true, append to decision.denied_tombstone and log deny_tombstone, then continue.",
+    "memory_system/store.py tombstone: when wiping a plaintext record's body, also insert its distinctive terms into forgotten_facts for the episode.",
+    "memory_system/agent.py: no signature change; verify sanitize_and_decide still returns no_memory for touched_deleted and add a unit assertion that a denied_tombstone Decision maps to 'no_memory'."
+  ],
+  "prior_art": [],
+  "dev_failure_mitigations": null,
+  "responds_to_dev_failure": null
+}

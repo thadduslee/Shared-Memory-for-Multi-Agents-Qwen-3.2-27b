@@ -1,0 +1,2 @@
+BEGIN; CREATE INDEX IF NOT EXISTS idx_access_log_checkpoint ON access_log(checkpoint_id); -- rationale: accelerates the Critic's per-checkpoint audit lookup over access_log (checkpoint_id filter), not the retrieval path.
+COMMIT;

@@ -1,0 +1,95 @@
+{
+  "current_mgs": 0.285714,
+  "mgs_if_perfect": {
+    "U": 1.0,
+    "A": 0.285714,
+    "F": 0.285714
+  },
+  "marginal": {
+    "U": 0.714286,
+    "A": 0.0,
+    "F": 0.0
+  },
+  "ranked": [
+    "U",
+    "A",
+    "F"
+  ],
+  "dominant_term": "U",
+  "dominant_gain": 0.714286,
+  "raw": {
+    "U": 0.2857142857142857,
+    "A": 0.0,
+    "F": 0.0
+  },
+  "component": "agent.py::query (answer coverage pass)",
+  "proposals": [
+    {
+      "component": "agent.py::query coverage pass",
+      "kind": "design",
+      "change": "Replace `if body_terms and not any(t in lower_answer for t in body_terms):` with `if body_terms and not all(t in lower_answer for t in body_terms):` so a record body is only considered covered when every distinctive term appears in the answer; otherwise append the full cleared body.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_002_cardiology_afib_cardioversion_confidential_backup_ckpt_06",
+        "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_08",
+        "med_episode_rewrite_en_016_early_pregnancy_deleted_haven_house_line_ckpt_02"
+      ]
+    },
+    {
+      "component": "store.py::retrieve Gates 2 and 3 denial accounting",
+      "kind": "design",
+      "change": "Require a denial to share at least min(2, len(terms)) distinctive tokens with the query before counting it into denied_rbac/denied_scope; sub-threshold records still `continue` (never released) and are still audit-logged as deny_rbac/deny_scope, so A stays 0.0 and the action no longer downgrades to answer_redacted on token-collision noise.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_09",
+        "med_episode_rewrite_en_002_cardiology_afib_cardioversion_confidential_backup_ckpt_06"
+      ]
+    },
+    {
+      "component": "agent.py::query LLM action override",
+      "kind": "design",
+      "change": "Normalize model_action with `.strip().lower()` and whitelist: for base_action 'answer' force any non-{answer,answer_redacted} model token to 'answer'; for base_action 'answer_redacted' force to 'answer_redacted'. Prevents free-form LLM refusal phrasing from escaping the clamp and reaching the `else: answer = NO_MEMORY_TEXT` tail.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_009_pe_deleted_willow_house_line_ckpt_01"
+      ]
+    }
+  ],
+  "observed_mechanisms": [
+    "answered_but_content_missing",
+    "evidence_withheld",
+    "wrong_action_shape"
+  ],
+  "mechanisms": [
+    {
+      "name": "answered_but_content_missing",
+      "component": "agent.py::query coverage loop (any vs all term check)",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_002_cardiology_afib_cardioversion_confidential_backup_ckpt_06",
+        "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_08",
+        "med_episode_rewrite_en_016_early_pregnancy_deleted_haven_house_line_ckpt_02"
+      ]
+    },
+    {
+      "name": "wrong_action_shape",
+      "component": "store.py::retrieve Gates 2/3 responsive-denial accounting",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_09"
+      ]
+    },
+    {
+      "name": "evidence_withheld",
+      "component": "agent.py::query LLM action override clamp",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_009_pe_deleted_willow_house_line_ckpt_01"
+      ]
+    }
+  ],
+  "evidence_checkpoint_ids": [
+    "med_episode_rewrite_en_002_cardiology_afib_cardioversion_confidential_backup_ckpt_06",
+    "med_episode_rewrite_en_009_pe_deleted_willow_house_line_ckpt_01",
+    "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_08",
+    "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_09",
+    "med_episode_rewrite_en_016_early_pregnancy_deleted_haven_house_line_ckpt_02"
+  ]
+}

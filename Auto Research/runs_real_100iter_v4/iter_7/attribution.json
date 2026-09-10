@@ -1,0 +1,122 @@
+{
+  "current_mgs": 0.575163,
+  "mgs_if_perfect": {
+    "U": 0.941176,
+    "A": 0.611111,
+    "F": 0.575163
+  },
+  "marginal": {
+    "U": 0.366013,
+    "A": 0.035948,
+    "F": 0.0
+  },
+  "ranked": [
+    "U",
+    "A",
+    "F"
+  ],
+  "dominant_term": "U",
+  "dominant_gain": 0.366013,
+  "raw": {
+    "U": 0.6111111111111112,
+    "A": 0.058823529411764705,
+    "F": 0.0
+  },
+  "regression": {
+    "verdict": "tied",
+    "iteration": 7,
+    "champion_iteration": 5,
+    "champion_mgs": 0.575163,
+    "current_mgs": 0.575163,
+    "delta": 0.0,
+    "streak": 2,
+    "terms": {
+      "baseline_iteration": 5,
+      "current_iteration": 7,
+      "baseline_mgs": 0.575163,
+      "current_mgs": 0.575163,
+      "delta_mgs": 0.0,
+      "moved": {
+        "U": 0.0,
+        "A": 0.0,
+        "F": 0.0
+      },
+      "delta_mgs_from": {
+        "U": 0.0,
+        "A": 0.0,
+        "F": 0.0
+      },
+      "interaction": 0.0,
+      "ranked_worst_first": [
+        "U",
+        "A",
+        "F"
+      ],
+      "worst_term": "U",
+      "worst_delta": 0.0
+    }
+  },
+  "verdict_vs_best": "tied",
+  "component": "answer_prompt_assembly (agent.py)",
+  "proposals": [
+    {
+      "component": "agent.py query()",
+      "kind": "design",
+      "change": "For action in {answer, answer_redacted}, set the answer to the verbatim concatenation of all decision.allowed bodies (optionally with a one-line lead-in). This ensures every required detail that exists in cleared evidence is included in the final answer.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ]
+    },
+    {
+      "component": "store.py retrieve() gate-1 coverage",
+      "kind": "design",
+      "change": "Change the tombstone admission condition from 'digests \u2286 covered_union' to 'covered_union non-empty and digests \u2229 covered_union non-empty'. Run full F suite to guard against leaks.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_13"
+      ]
+    }
+  ],
+  "regression_verdict": "not_the_cause",
+  "regression_cause": "The two-phase gate-1 coverage skip produced no change to U, A, or F (each +0.0000) and therefore did not cause the tie; the dominant answered_but_content_missing failures are unrelated to tombstones and were not addressed.",
+  "observed_mechanisms": [
+    "answered_but_content_missing",
+    "evidence_withheld"
+  ],
+  "mechanisms": [
+    {
+      "name": "answered_but_content_missing",
+      "component": "agent.py answer assembly",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ]
+    },
+    {
+      "name": "evidence_withheld",
+      "component": "store.py gate-1 tombstone coverage",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_13"
+      ]
+    }
+  ],
+  "evidence_checkpoint_ids": [
+    "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+    "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+    "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+    "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_13",
+    "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+    "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+    "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+  ]
+}

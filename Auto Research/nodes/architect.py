@@ -1,9 +1,31 @@
 """Architect node -- the Proposer.
 
-Reads: the Critic's latest critique, the previous iteration's DEVELOPER BUILD
-FAILURE if there was one, the current SQL schema, a read-only view of the
+Reads: the Critic's latest `critique.md`, its own notebook of every iteration
+before that one (`runs/critique_summary.md`), the previous iteration's DEVELOPER
+BUILD FAILURE if there was one, the current SQL schema, a read-only view of the
 codebase, and a web survey of prior art.
-Writes: `proposed_design`, `sql_schema`, `migration_sql`, `dev_instructions`.
+Writes: `proposed_design`, `sql_schema`, `migration_sql`, `dev_instructions`,
+`critique_digest`, and the notebook itself.
+
+IT IS ALSO THE LOOP'S HISTORIAN, and the ORDER IN WHICH IT DOES THAT IS THE
+POINT.  Iteration i+1's turn runs in exactly four steps:
+
+    1. read iteration i's `critique.md` (it is `state["critique"]` verbatim --
+       the Critic writes that text and nothing else into the file);
+    2. read `critique_summary.md`, the notebook of iterations 1..i-1;
+    3. write the design, the schema and the Developer's work order from the two;
+    4. ONLY THEN append a summary of iteration i's critique to the notebook.
+
+Step 4 comes last so that the notebook a turn reads is the history BEFORE the
+critique it is answering: fold step 4 into step 2 and the newest critique arrives
+twice, once in full and once as a summary of itself, with nothing marking which
+of the two the design is supposed to be a response to.
+
+The Architect is the right node to keep that notebook because it is the only one
+that reads a critique and writes the design answering it in the same turn, so the
+summary comes back in the same JSON block as the design -- no extra model call,
+and no second reader that could disagree with the first about what the critique
+said.  See nodes/_recap.py.
 
 Privilege: `ARCHITECT_PROFILE` mounts no file-write plugin and no shell, so the
 Architect physically cannot edit the codebase.  Its read-only view of the code
@@ -20,9 +42,18 @@ from pathlib import Path
 from typing import Any
 
 import config
+import scoreboard
+from harness.dsh_client import looks_like_tool_call_markup, strip_tool_call_markup
 from harness.profiles import ARCHITECT_PROFILE
 from nodes._common import node_span, usage_delta, write_artifact
-from harness.dsh_client import looks_like_tool_call_markup, strip_tool_call_markup
+from nodes._recap import (
+    append_to_notebook,
+    dev_failure_summary,
+    digest_entry,
+    fallback_critique_summary,
+    load_notebook,
+    render_notebook_prompt,
+)
 from nodes._transport import agent_call_json
 from state import RESET, OrchestratorState
 from websearch import get_search_client
@@ -157,14 +188,167 @@ _DEV_FAILURE_GUIDANCE = """
   block, one entry per failure you are addressing.
 """
 
+# The design-failure advice above is wrong for the other two classifications:
+# "only the design can fix this" is false of a network outage and false of a
+# work order too vague to act on, and following it produces exactly the
+# unnecessary redesign that both cases must avoid.
+_CLASSIFICATION_GUIDANCE: dict[str, str] = {
+    "infrastructure": """
+### WHAT THIS MEANS FOR THIS ITERATION
+- The design was never actually tested. Do not treat any gate above as evidence
+  about it, and do not change the schema in response to a transport failure.
+- Keep the previous design's intent. If you still believe in it, restate it as a
+  SHORTER work order -- the fewer turns an episode needs, the less of it a flaky
+  endpoint can eat.
+- Do not spend this iteration on a new mechanism. The cheapest useful outcome
+  here is a clean measurement of the design you already had.
+- Say under `dev_failure_mitigations` how you shortened the work order.
+""",
+    "inconclusive": """
+### WHAT THIS MEANS FOR THIS ITERATION
+- Nothing failed. The Developer never got as far as running a gate, which means
+  the work order did not tell it concretely enough what to change.
+- Rewrite the WORK ORDER, not the design. Every step must name a file, a
+  function, and what that function does differently afterwards. A step like
+  "implement retrieve()" against code that already has one is not actionable and
+  is what produces an episode of reading.
+- Cut the number of steps. An episode that lands three concrete edits is worth
+  more than one that reads the whole workspace deciding where to start.
+- Say under `dev_failure_mitigations` which steps you made concrete.
+""",
+}
+
+
+# How the Architect should READ a failed build, per classification. The framing
+# is the difference between a redesign and a re-run, and it used to be one
+# sentence for all three: "Read this as a critique of the design."
+#
+# In run-8cf58d33b311 that sentence was wrong. Iteration 2's episode never
+# called `run_tests` or `sql_exec` -- it died of OpenRouter timeouts -- and the
+# Architect, told to read it as a design critique, produced the work order
+# ("remove the top_k stop") that cost the run 0.095 MGS when iteration 3 built
+# it. A gate that never ran is not a gate that failed, and the Architect must be
+# told which of the two it is looking at before it is asked to respond.
+_CLASSIFICATION_FRAMING: dict[str, str] = {
+    "design": (
+        "Read this as a critique of the design: a mandatory gate RAN and FAILED. "
+        "The build produced no evaluation, no MGS and no Critic feedback, so this "
+        "block is the whole of what this iteration measured. The metrics above "
+        "are from the last iteration that did build.\n"
+    ),
+    "infrastructure": (
+        "DO NOT REDESIGN IN RESPONSE TO THIS. The episode died of INFRASTRUCTURE "
+        "-- transport timeouts, empty completions, a dead endpoint -- not of "
+        "anything about your design. The graph has already re-run this iteration "
+        "as many times as its budget allows and it still could not get a clean "
+        "episode, so you are seeing it. The right response is the SMALLEST "
+        "possible work order that still moves the metric, so that the next "
+        "episode needs fewer turns to land it. Changing the schema will not make "
+        "the network work.\n"
+    ),
+    "inconclusive": (
+        "THIS IS A WORK-ORDER PROBLEM, NOT A SCHEMA PROBLEM. No mandatory gate "
+        "failed -- the Developer simply never ran one. It read, listed and "
+        "thought its way to the ceiling without building anything, which is what "
+        "an episode does when the work order does not say concretely enough what "
+        "to change. Do not rewrite the design in response. Rewrite the WORK "
+        "ORDER: fewer steps, each naming one file, one function, and what that "
+        "function does differently afterwards.\n"
+    ),
+}
+
+
+def _turn_budget_note(state: OrchestratorState) -> str:
+    """How much of its turn budget the previous Developer episode spent.
+
+    Rendered as a warning when the episode came close to the ceiling, because
+    "43 of 60" and "60 of 60" are the difference between a work order that fit
+    and one that cost the whole iteration. Silent on iteration 1, which has no
+    previous episode and would otherwise be handed a fabricated 0/0.
+    """
+    used = int(state.get("dev_turns_used", 0) or 0)
+    ceiling = int(state.get("dev_turn_ceiling", 0) or 0)
+    if not used or not ceiling:
+        return ""
+    line = (
+        f"Previous Developer episode used {used}/{ceiling} turns"
+        f" for a {len(_work_order_steps(state))}-step work order."
+    )
+    if used >= ceiling:
+        return (
+            line
+            + "\n!! IT RAN OUT OF TURNS. An episode that hits the ceiling before running"
+            "\n!! `compile_check`, `run_tests` and `sql_exec` is scored as a FAILED BUILD"
+            "\n!! and every edit it made is discarded -- the iteration produces nothing."
+            "\n!! YOUR WORK ORDER WAS TOO BIG. Cut it to the smallest change that still"
+            "\n!! moves the metric: fewer steps, each naming one file, one function, and"
+            "\n!! what that function does differently afterwards."
+        )
+    if used >= ceiling * 0.75:
+        return (
+            line
+            + f"\n!! That is {used / ceiling:.0%} of the budget. Another step or two and the"
+            "\n!! episode would have hit the ceiling and scored nothing. Keep this one"
+            "\n!! the same size or smaller."
+        )
+    return line
+
+
+def _work_order_steps(state: OrchestratorState) -> list[str]:
+    """The previous work order's steps, for reporting its size back."""
+    text = str(state.get("dev_instructions") or "")
+    return [line for line in text.splitlines() if line.strip()]
+
 
 def _gate_summary(report: dict[str, Any]) -> str:
-    """The unmet MANDATORY gates, each named with the tool that sets it."""
+    """The mandatory gates, saying for each whether it FAILED or never RAN.
+
+    THESE ARE NOT THE SAME FACT and the previous version of this function
+    printed them as one. `missing_gates` is every gate whose boolean is False,
+    and the boolean is False both when the tool ran and failed and when the tool
+    was never called at all. The Architect was handed `unmet mandatory gates:
+    tests_ok, migration_ok` for an episode in which neither `run_tests` nor
+    `sql_exec` had ever been invoked, and it redesigned against a test failure
+    that had not happened.
+    """
     gate_tools = report.get("gate_tools") or {}
-    missing = [str(name) for name in (report.get("missing_gates") or [])]
-    if not missing:
-        return "(all three mandatory gates were green; the episode still did not finish)"
-    return ", ".join(f"{name} (set by `{gate_tools.get(name, '?')}`)" for name in missing)
+    status = report.get("gate_status") or {}
+    if not status:
+        # A report from before gate provenance existed (a resumed run, a fixture).
+        missing = [str(name) for name in (report.get("missing_gates") or [])]
+        if not missing:
+            return "mandatory gates: all three green; the episode still did not finish"
+        return "unmet mandatory gates: " + ", ".join(
+            f"{name} (set by `{gate_tools.get(name, '?')}`)" for name in missing
+        )
+
+    failed = [name for name, value in sorted(status.items()) if value == "failed"]
+    never = [name for name, value in sorted(status.items()) if value == "never_ran"]
+    parts: list[str] = []
+    if failed:
+        parts.append(
+            "gates that RAN AND FAILED: "
+            + ", ".join(f"{name} (`{gate_tools.get(name, '?')}`)" for name in failed)
+        )
+    if never:
+        parts.append(
+            "gates that were NEVER RUN (this is not evidence that they would fail): "
+            + ", ".join(f"{name} (`{gate_tools.get(name, '?')}` was never called)"
+                        for name in never)
+        )
+    if not parts:
+        return "mandatory gates: all three green; the episode still did not finish"
+    return "\n".join(parts)
+
+
+def _transport_clause(report: dict[str, Any]) -> str:
+    """How much of the retry budget the network spent, when any of it did."""
+    count = int(report.get("n_transport_failures", 0) or 0)
+    if not count:
+        return ""
+    errors = [str(e) for e in (report.get("transport_errors") or []) if e]
+    detail = f" ({errors[0]})" if errors else ""
+    return f", of which {count} were TRANSPORT failures, not build failures{detail}"
 
 
 def _repeat_warning(state: OrchestratorState, report: dict[str, Any]) -> str:
@@ -260,17 +444,17 @@ def _developer_failure_block(state: OrchestratorState) -> str:
     if not isinstance(report, dict) or not report:
         return ""
 
+    classification = str(report.get("classification") or "design")
     header = (
-        "\n## THE DEVELOPER COULD NOT BUILD YOUR PREVIOUS DESIGN\n"
-        "Read this as a critique of the design, not as a status report: the build "
-        "failed, so this iteration produced no evaluation, no MGS and no Critic "
-        "feedback at all. The metrics above are from the last iteration that did "
-        "build.\n\n"
+        f"\n## THE DEVELOPER COULD NOT BUILD YOUR PREVIOUS DESIGN ({classification})\n"
+        f"{_CLASSIFICATION_FRAMING.get(classification, _CLASSIFICATION_FRAMING['design'])}\n"
         f"reason: {report.get('reason', 'unknown')}\n"
+        f"why it failed: {report.get('classification_reason') or '(unclassified)'}\n"
         f"failure_signature: {report.get('signature') or '(none)'}\n"
-        f"unmet mandatory gates: {_gate_summary(report)}\n"
+        f"{_gate_summary(report)}\n"
         f"retries: {report.get('retries_used', 0)}/{report.get('retry_cap', 0)}"
-        f"{' (exhausted)' if report.get('exhausted') else ''}\n"
+        f"{' (exhausted)' if report.get('exhausted') else ''}"
+        f"{_transport_clause(report)}\n"
         f"local test pass rate: {float(report.get('pass_rate', 0.0)):.3f}\n"
         f"workspace started from: {report.get('workspace_from', 'unknown')}\n"
         f"files the Developer wrote: "
@@ -280,15 +464,23 @@ def _developer_failure_block(state: OrchestratorState) -> str:
 
     counts = (
         f"\n### WHERE IT FAILED\n"
-        f"{report.get('n_build_failures', 0)} build failure(s) and "
-        f"{report.get('n_loop_failures', 0)} loop stall(s) spent the retry budget.\n"
+        f"{report.get('n_build_failures', 0)} build failure(s), "
+        f"{report.get('n_loop_failures', 0)} loop stall(s) and "
+        f"{report.get('n_transport_failures', 0)} transport failure(s) "
+        f"spent the retry budget.\n"
     )
+
+    # The advice that matches what actually happened. See the note above
+    # `_CLASSIFICATION_GUIDANCE`: telling an Architect that "only the design can
+    # fix this" after a network outage is how a redesign gets written in answer
+    # to a timeout.
+    guidance = _CLASSIFICATION_GUIDANCE.get(classification, _DEV_FAILURE_GUIDANCE)
 
     # The guidance is reserved out of the budget rather than appended after it,
     # so a long pytest failure can never push the instruction that tells the
     # Architect what to DO with all of this off the end.
     chunks = [header, repeat, counts]
-    budget = DEV_FAILURE_MAX_CHARS - sum(len(c) for c in chunks) - len(_DEV_FAILURE_GUIDANCE)
+    budget = DEV_FAILURE_MAX_CHARS - sum(len(c) for c in chunks) - len(guidance)
 
     dropped = 0
     for stanza in _failure_lines(report):
@@ -304,8 +496,104 @@ def _developer_failure_block(state: OrchestratorState) -> str:
     if trace and len(trace) + 40 <= budget:
         chunks.append(f"\n### THE TRACE IT DIED ON\n```\n{trace}\n```\n")
 
-    chunks.append(_DEV_FAILURE_GUIDANCE)
+    chunks.append(guidance)
     return "".join(chunks)
+
+
+# ======================================================================
+# the notebook of everything before this iteration
+# ======================================================================
+#
+# WHY THE ARCHITECT KEEPS IT. `state["critique"]` holds exactly one critique --
+# the most recent -- so iteration 4 was handed iteration 3's diagnosis and had no
+# record whatsoever of what iterations 1 and 2 had already found and already
+# tried. In runs_test2 that showed up as iterations 1, 2 and 4 all blaming the
+# same `sanitize_and_decide` branch ordering, each without any sign of knowing
+# an earlier one had already been there.
+#
+# The Architect is the right node to summarise it because it is the only one that
+# reads a critique and writes the design answering it in the same turn, and it
+# does so in the JSON block it is already producing -- so the notebook costs no
+# extra model call and there is no second reader to disagree about what the
+# critique said. The rows it adds go to `runs/critique_summary.md` AND to
+# `critique_digest` in macro-graph state: the file is what the next turn reads,
+# and the state list is what survives a wiped or repointed RUNS_DIR.
+
+
+def _critique_source_iteration(state: OrchestratorState, iteration: int) -> int:
+    """Which iteration the critique currently in state was written by.
+
+    NOT always `iteration - 1`: a build that never compiled never reaches the
+    Judge, so no Critic runs and `critique` stays as whatever the last iteration
+    that DID build produced.
+    """
+    recorded = int(state.get("critique_iteration") or 0)
+    # A checkpointer snapshot written before `critique_iteration` existed has
+    # nothing to read here. On the green path the critique is always the
+    # immediately preceding iteration's, so that is the assumption to fall back
+    # on; where it is wrong, the dedupe below still prevents a duplicate row.
+    return recorded or max(0, iteration - 1)
+
+
+def _recap_additions(
+    state: OrchestratorState, block: dict[str, Any], iteration: int, critique: str
+) -> list[dict[str, Any]]:
+    """The rows this Architect turn adds to the notebook, oldest first.
+
+    At most two, and usually one:
+
+    * the critique it was just handed, summarised by the model (or, if the model
+      did not supply a summary, derived deterministically from the attribution
+      the Critic computed in Python -- which exists even when the Critic model
+      was unreachable);
+    * a build failure that killed the previous iteration outright, which
+      produced no critique at all. Without a row of its own that iteration would
+      simply be missing from a numbered history, and a gap reads as a lost
+      record rather than as the thing that actually happened.
+
+    EVERY ITERATION IS SUMMARISED AT MOST ONCE. Two consecutive failed builds
+    leave the same stale critique in state across three Architect turns; writing
+    it each time would put the same diagnosis in the notebook three times over
+    and make one finding look like three iterations independently agreeing on it.
+    The dedupe reads `critique_digest` rather than re-parsing the notebook file:
+    the file is prose, and the digest is the structured record of exactly which
+    iterations have already been written into it.
+    """
+    cap = int(config.ARCHITECT_CRITIQUE_RECAP_MAX_TOKENS)
+    already = {
+        int(entry.get("iteration") or 0)
+        for entry in (state.get("critique_digest") or [])
+        if isinstance(entry, dict)
+    }
+    additions: list[dict[str, Any]] = []
+
+    report = state.get("dev_failure_report") or {}
+    if isinstance(report, dict) and report:
+        failed_at = int(report.get("iteration") or 0) or max(0, iteration - 1)
+        if failed_at and failed_at not in already:
+            additions.append(
+                digest_entry(failed_at, dev_failure_summary(report), "dev_failure", cap)
+            )
+            already.add(failed_at)
+
+    if critique.strip():
+        source = _critique_source_iteration(state, iteration)
+        if source and source not in already:
+            summary = str(block.get("previous_critique_summary") or "").strip()
+            if not summary:
+                # Not an error worth stopping for: the design itself parsed, and
+                # a mechanical summary of the measured attribution carries the
+                # same facts. Logged so a model that never fills the key in is
+                # visible rather than silently papered over.
+                log.info(
+                    "architect returned no previous_critique_summary for iteration %d; "
+                    "recapping from the attribution instead", source,
+                )
+                summary = fallback_critique_summary(state.get("attribution") or {}, source)
+            additions.append(digest_entry(source, summary, "critique", cap))
+
+    additions.sort(key=lambda entry: entry["iteration"])
+    return additions
 
 
 def _work_order_text(steps: list[Any]) -> str:
@@ -372,6 +660,13 @@ async def architect_node(state: OrchestratorState) -> dict[str, Any]:
                     hits.append(line)
         prior_art = "\n".join(hits) or "(web search unavailable; proposing without prior art)"
 
+        # ---- (b) STEP 1: the previous iteration's critique.md ----
+        #
+        # `state["critique"]` IS that file: the Critic writes this exact text to
+        # `runs/iter_{i}/critique.md` and appends nothing to it, so reading state
+        # and reading the file are the same read -- and state survives a wiped or
+        # repointed RUNS_DIR, which is why it is the one taken.
+        #
         # STRIPPED BEFORE IT IS PASTED IN. A critique that carries tool-call
         # markup teaches the Architect to emit tool-call markup: in runs_5iter
         # iteration 3 the Architect reproduced the exact `OpenFile` invocation
@@ -380,6 +675,47 @@ async def architect_node(state: OrchestratorState) -> dict[str, Any]:
         critique = strip_tool_call_markup(str(state.get("critique") or ""))
         attribution = state.get("attribution") or {}
         previous_schema = str(state.get("sql_schema") or "")
+
+        # THE TREND, which this prompt did not have. What it showed instead was
+        # the latest U, A, F and MGS -- four numbers true of one iteration and
+        # silent about the run. run-8cf58d33b311 designed iterations 3, 4 and 5
+        # that way while its MGS fell 0.3172 -> 0.2222 -> 0.1830 -> 0.1190, and
+        # every one of those designs predicted a rise, because none of them was
+        # ever told the previous prediction had been wrong.
+        #
+        # `rolled_back_to` matters as much as the numbers: when the champion is
+        # not the previous iteration, the workspace inlined further down this
+        # prompt is the CHAMPION's code, and a work order that tries to revert
+        # changes which are already gone spends the whole iteration on a no-op.
+        # WHAT THE LAST WORK ORDER COST, in the currency the Developer is bounded
+        # by. Work-order SIZE is the one lever the Architect has over that, and
+        # turn exhaustion is the failure that lever causes -- an episode that
+        # runs out of turns before calling its gate tools is scored as a failed
+        # build and every edit it made is thrown away. In run-b3275eb7e373 a
+        # 5-step order landed in 17-19 turns while 8- and 10-step orders hit the
+        # 60-turn ceiling with the gates never run, and nothing anywhere told
+        # the Architect that was the pattern.
+        budget_block = _turn_budget_note(state)
+        parent, lineage_reason = scoreboard.lineage_parent(state, fallback=iteration - 1)
+        rolled_back_to = parent if parent and parent != iteration - 1 else 0
+        trend_block = scoreboard.trend_table(
+            state,
+            failed_iterations=state.get("dev_failure_history") or [],
+            rolled_back_to=rolled_back_to,
+            lineage_reason=lineage_reason,
+        )
+        # THE CODE THE DESIGN IS ABOUT, which after a rollback is not the code
+        # in `workspace`. `workspace` stays what it was -- it anchors the
+        # harness working directory, and pointing that at another iteration's
+        # folder would file this turn's session artifacts under the champion.
+        # The VIEW is what moves: showing the losing implementation while the
+        # Developer is about to edit the winning one is how a work order comes
+        # to describe edits to lines that do not exist.
+        code_view_source = workspace
+        if rolled_back_to:
+            parent_workspace = config.iteration_dir(rolled_back_to) / "workspace"
+            if parent_workspace.is_dir() and any(parent_workspace.rglob("*.py")):
+                code_view_source = parent_workspace
 
         # An unbuilt design never reaches the Judge or the Critic, so on this
         # path `critique` is stale (or empty) and this block is the ONLY
@@ -408,18 +744,52 @@ async def architect_node(state: OrchestratorState) -> dict[str, Any]:
             if dev_failure else ""
         )
 
+        # ---- (c) STEP 2: the notebook of every iteration BEFORE that one ----
+        #
+        # Read here, before the model call, and appended to only after it (step
+        # 4, below the design writes). What this turn is shown is therefore
+        # iterations 1..i-1; iteration i is the critique above, in full. The two
+        # never overlap, so the design cannot be answering a summary of the same
+        # critique it already has verbatim in front of it.
+        recap_cap = int(config.ARCHITECT_CRITIQUE_RECAP_MAX_TOKENS)
+        notebook_path = config.critique_summary_path()
+        notebook_block = render_notebook_prompt(
+            load_notebook(notebook_path, state.get("critique_digest") or [], recap_cap)
+        )
+
+        # The one summary key that extends it. Conditional for the same reason
+        # `mitigation_key` is: on iteration 1 there is no critique to summarise,
+        # and a model asked for a summary of something that does not exist writes
+        # one anyway -- which would seed the notebook with fiction on its very
+        # first row and carry it for the rest of the run.
+        summary_key = (
+            f"\nAlso include `previous_critique_summary`: at most {recap_cap} tokens of plain\n"
+            "prose summarising the CRITIQUE FROM THE PREVIOUS ITERATION above -- what it\n"
+            "found, which component it blamed, and what it asked for. You will append it to\n"
+            "critique_summary.md after this design, and every later iteration reads that\n"
+            "file, so write it for someone who will never see the full critique. No\n"
+            "markdown, no lists, one paragraph."
+            if critique.strip() else ""
+        )
+
         task = f"""You are designing iteration {iteration} of the memory system.
 
 ## CURRENT CURRICULUM PHASE
 {phase}
 
-## MEASURED PERFORMANCE SO FAR
-U (utility_accuracy)        = {state.get('utility_score', 0.0):.4f}
-A (privacy_leakage_rate)    = {state.get('access_violation_rate', 1.0):.4f}
-F (deletion_leakage_rate)   = {state.get('forgetting_failure_rate', 1.0):.4f}
-MGS (compliance_utility_score) = {state.get('mgs_score', 0.0):.4f}   target {config.MGS_TARGET}
-Developer local pass rate   = {state.get('dev_set_pass_rate', 0.0):.3f}
-{dev_failure}{feedback_block}
+## MEASURED PERFORMANCE -- EVERY ITERATION, NOT JUST THE LAST ONE
+MGS = U * (1 - A) * (1 - F).  U is utility_accuracy (higher is better); A is
+privacy_leakage_rate and F is deletion_leakage_rate (LOWER is better).
+{trend_block}
+Latest measurement: U={state.get('utility_score', 0.0):.4f} A={state.get('access_violation_rate', 1.0):.4f} F={state.get('forgetting_failure_rate', 1.0):.4f} MGS={state.get('mgs_score', 0.0):.4f} (target {config.MGS_TARGET})
+Developer local pass rate = {state.get('dev_set_pass_rate', 0.0):.3f}
+{budget_block}
+
+READ THE TABLE BEFORE YOU DESIGN. A design that targets the same term the last
+three iterations targeted, when all three lost MGS, is the fourth iteration of
+a strategy that has already been measured as wrong. The delta column is the
+only evidence you have about whether your previous designs worked.
+{dev_failure}{feedback_block}{notebook_block}
 ## PRIOR ART (from web search -- cite what you use)
 {prior_art}
 
@@ -429,7 +799,7 @@ Developer local pass rate   = {state.get('dev_set_pass_rate', 0.0):.3f}
 ```
 
 ## CURRENT IMPLEMENTATION (read-only)
-{_read_only_codebase_view(workspace)}
+{_read_only_codebase_view(code_view_source)}
 
 ## YOUR TASK
 Produce the design document and the Developer's work order.
@@ -447,7 +817,7 @@ Remember the storage constraint (SQL/SQLite only) and both MUST requirements in
 your instructions.
 End with a single ```json fenced block containing schema_ddl, migration_sql,
 retrieval_loop, forgetting_mechanism, work_order, targets_metric and
-expected_tradeoff.{mitigation_key}
+expected_tradeoff.{mitigation_key}{summary_key}
 """
 
         # Explicit budget: this is one open-ended design turn over a large
@@ -512,6 +882,13 @@ expected_tradeoff.{mitigation_key}
             log.error("architect produced no schema DDL and none exists from a "
                       "previous iteration; the Developer has nothing to migrate")
 
+        # The notebook rows this turn contributes, derived AFTER the design is
+        # parsed so that a reply which failed to produce a JSON block still gets
+        # a deterministic row rather than dropping that iteration from the
+        # history entirely. Nothing is written to the notebook yet -- see step 4.
+        recap_additions = _recap_additions(state, block, iteration, critique)
+
+        # ---- STEP 3: the design and the Developer's work order ----
         iter_dir = config.iteration_dir(iteration)
         write_artifact(iter_dir / "design.md", design)
         write_artifact(iter_dir / "migration.sql", migration_sql)
@@ -530,14 +907,40 @@ expected_tradeoff.{mitigation_key}
                 # Architect was shown, which is what a repeat is detected on.
                 "dev_failure_mitigations": block.get("dev_failure_mitigations"),
                 "responds_to_dev_failure": (state.get("dev_failure_report") or {}).get("signature"),
+                # What this turn appended to `critique_summary.md`, in the file
+                # that is meant to be read by a program: `check_learning.py` and
+                # anything else auditing whether a run actually moved.
+                "critique_recap_added": recap_additions,
             },
         )
+
+        # ---- STEP 4: append to the notebook, LAST ----
+        #
+        # After the design is written, never before it: this turn designed from
+        # the critique in full and from the notebook as it stood WITHOUT that
+        # critique in it, and appending here is what preserves that for the next
+        # turn. Appending rather than rewriting from `critique_digest` also keeps
+        # the file an audit trail -- a rewrite could silently correct or drop a
+        # row that an earlier iteration was actually shown.
+        if recap_additions:
+            append_to_notebook(notebook_path, recap_additions, recap_cap)
+            log.info(
+                "architect iter=%d: appended %s to %s (%d entries total)",
+                iteration,
+                ", ".join(f"iter {e['iteration']} ({e['kind']})" for e in recap_additions),
+                notebook_path.name,
+                len(state.get("critique_digest") or []) + len(recap_additions),
+            )
 
         return {
             "proposed_design": design,
             "sql_schema": schema_ddl,
             "migration_sql": migration_sql,
             "dev_instructions": instructions,
+            # Append-only: `operator.add` folds this into the digest that mirrors
+            # `critique_summary.md` in macro-graph state, which is what the
+            # dedupe reads and what a wiped RUNS_DIR is recovered from.
+            "critique_digest": recap_additions,
             "iteration_count": iteration,
             # A fresh iteration starts with a clean evaluation slate: `eval_results`
             # has an `operator.add` reducer, so it can only be reset by the one
@@ -546,6 +949,11 @@ expected_tradeoff.{mitigation_key}
             "eval_results": RESET,
             "predictions_path": "",
             "failure_signature": RESET,
+            # The infrastructure-retry budget is PER ITERATION, and this is the
+            # one node that runs exactly once at the top of each. Leaving it
+            # would let two transport blips spread over five iterations exhaust
+            # a budget meant to absorb two blips inside one.
+            "infra_retry_count": 0,
             "halt_reason": None,
             "token_usage": usage_delta(result.usage),
             "node_timings": [span],

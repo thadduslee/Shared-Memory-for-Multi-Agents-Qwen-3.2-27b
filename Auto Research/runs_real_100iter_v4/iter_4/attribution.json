@@ -1,0 +1,108 @@
+{
+  "current_mgs": 0.470588,
+  "mgs_if_perfect": {
+    "U": 0.941176,
+    "A": 0.5,
+    "F": 0.470588
+  },
+  "marginal": {
+    "U": 0.470588,
+    "A": 0.029412,
+    "F": 0.0
+  },
+  "ranked": [
+    "U",
+    "A",
+    "F"
+  ],
+  "dominant_term": "U",
+  "dominant_gain": 0.470588,
+  "raw": {
+    "U": 0.5,
+    "A": 0.058823529411764705,
+    "F": 0.0
+  },
+  "regression": {},
+  "verdict_vs_best": "improved",
+  "component": "MemoryStore.retrieve candidate ranking / top_k truncation",
+  "proposals": [
+    {
+      "component": "MemoryStore.retrieve candidate ranking and agent top_k default",
+      "kind": "design",
+      "change": "Rank live candidates by real-content overlap (total - structural) before structural-then-recency, so sparse logistics/date records out-rank chatty rows that merely reuse vocabulary; raise the agent default top_k from 11 to ~16 in GateMemAgent.__init__ (signature default in retrieve and pinned top_k=8/1 test semantics untouched).",
+      "expected_fixes": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ]
+    },
+    {
+      "component": "Decision.query_answer_denials accumulator in MemoryStore.retrieve gates 2/3",
+      "kind": "design",
+      "change": "Count a gate-2/gate-3 denial as answer-bearing only when its real-content digests add at least one digest absent from the union of allowed records' content digests (computed as PASS 2 fills allowed). A denial whose content vocabulary is a subset of the allowed union withholds nothing answerable, so query_answer_denials stays 0 and sanitize_and_decide emits 'answer'.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_09"
+      ]
+    },
+    {
+      "component": "MemoryStore._index_record / tombstone() / _is_responsive + record_terms & tombstone_terms schema",
+      "kind": "design",
+      "change": "Add is_structural to record_terms and tombstone_terms (DDL above), tag digests at index time via _is_structural_term, propagate the flag in tombstone(), and in the _is_responsive tombstoned branch count overlap only over is_structural=0 digests so a structurally-only-related deletion (contact tag / digit runs) no longer forces no_memory. Preserve the _DEFAULT_OVERLAP fallback when a tombstone has no real-content rows.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_13"
+      ]
+    }
+  ],
+  "observed_mechanisms": [
+    "answered_but_content_missing",
+    "wrong_action_shape",
+    "evidence_withheld"
+  ],
+  "mechanisms": [
+    {
+      "name": "answered_but_content_missing",
+      "component": "MemoryStore.retrieve (PASS 2 top_k break + candidate sort) in memory_system/store.py",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ]
+    },
+    {
+      "name": "wrong_action_shape",
+      "component": "Decision.query_answer_denials accumulator in MemoryStore.retrieve gates 2/3 (memory_system/store.py)",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_09"
+      ]
+    },
+    {
+      "name": "evidence_withheld",
+      "component": "MemoryStore._is_responsive tombstoned branch + tombstone_terms schema (memory_system/store.py)",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_13"
+      ]
+    }
+  ],
+  "evidence_checkpoint_ids": [
+    "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+    "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_09",
+    "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+    "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_05",
+    "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+    "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_13",
+    "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+    "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+    "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+  ]
+}

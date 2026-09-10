@@ -5,6 +5,17 @@ current design document and SQL schema.
 Output: `critique` (Markdown, written to `runs/iter_n/critique.md`) and
 `attribution` (the ranked marginal contributions).
 
+THE ARTIFACT IS EXACTLY THE STATE FIELD.  `runs/iter_n/critique.md` is this
+critique and nothing else, so the Architect that opens that file at the start of
+the next iteration reads the same bytes that `state["critique"]` carries.
+
+THE HISTORY OF EARLIER ITERATIONS IS NOT THIS NODE'S TO KEEP.  It lives in
+`runs/critique_summary.md`, which the Architect writes -- it is the only node
+that reads a critique and writes the design answering it in the same turn.  A
+recap appended here would also mean the next Architect summarising a file that
+already contains the earlier summaries, and a summary of a summary is where a
+feedback loop quietly stops carrying information.  See nodes/_recap.py.
+
 THE ATTRIBUTION IS COMPUTED IN PYTHON, NOT ASKED OF THE MODEL.
 `MGS = U * (1 - A) * (1 - F)` is arithmetic, and a model asked to rank three
 terms by their effect on a product will sometimes rank them by which one *looks*
@@ -22,11 +33,12 @@ from pathlib import Path
 from typing import Any
 
 import config
+import scoreboard
 from gatemem_adapter import memory_governance_score
 from harness.dsh_client import looks_like_tool_call_markup, strip_tool_call_markup
-from nodes._transport import agent_call_json
 from harness.profiles import CRITIC_PROFILE
 from nodes._common import node_span, usage_delta, write_artifact
+from nodes._transport import agent_call_json
 from state import OrchestratorState
 
 log = logging.getLogger("orchestrator.critic")
@@ -369,6 +381,103 @@ def _mechanism_census(
 
 
 
+def _regression_block(regression: dict[str, Any]) -> str:
+    """The headline section, when the last iteration failed to beat the best.
+
+    Placed ABOVE the marginal ranking rather than below it, because it is the
+    only part of this prompt that is about what CHANGED. Everything else in the
+    Critic's task describes the current state -- which checkpoints fail, which
+    attack types concentrate failure, what the retrieval counters said -- and
+    none of it can distinguish "this has always been the weak term" from "we
+    broke this last iteration". Only the movement can.
+    """
+    if not regression:
+        return ""
+    terms = regression.get("terms") or {}
+    moved = terms.get("moved") or {}
+    cost = terms.get("delta_mgs_from") or {}
+    worst = str(terms.get("worst_term") or "")
+    streak = int(regression.get("streak") or 0)
+    verdict = str(regression.get("verdict") or "")
+
+    headline = (
+        f"Iteration {regression.get('iteration')} scored MGS="
+        f"{float(regression.get('current_mgs') or 0.0):.4f}. The best iteration so far is "
+        f"{regression.get('champion_iteration')} at MGS="
+        f"{float(regression.get('champion_mgs') or 0.0):.4f} "
+        f"({float(regression.get('delta') or 0.0):+.4f})."
+    )
+    movement_header = (
+        "WHICH TERM MOVED, and what that movement cost MGS "
+        f"(against iteration {terms.get('baseline_iteration')}):"
+    )
+    lines = [
+        "## !! REGRESSION -- THIS IS THE FINDING",
+        headline,
+        "",
+        movement_header,
+        f"  U: {moved.get('U', 0.0):+.4f}   -> MGS {cost.get('U', 0.0):+.4f}",
+        f"  A: {moved.get('A', 0.0):+.4f}   -> MGS {cost.get('A', 0.0):+.4f}",
+        f"  F: {moved.get('F', 0.0):+.4f}   -> MGS {cost.get('F', 0.0):+.4f}",
+    ]
+    if worst:
+        lines.append(f"  The costliest movement was {worst}.")
+    if verdict == scoreboard.VERDICT_TIED:
+        lines.append(
+            "\nThis iteration TIED rather than fell. Its code is not being adopted: "
+            "the next Developer inherits the champion's workspace instead. Say what "
+            "the change failed to buy, and what would have to be different."
+        )
+    if streak >= 2:
+        lines.append(
+            f"\n!! {streak} CONSECUTIVE ITERATIONS have now failed to beat iteration "
+            f"{regression.get('champion_iteration')}. The direction being pushed is "
+            "not working. A critique that recommends more of it is the fourth "
+            "iteration of a strategy already measured as wrong."
+        )
+    lines.append(
+        "\nTHE DIFF BELOW IS THE PRIME SUSPECT. The change made this iteration is "
+        "the only thing that moved between the champion's measurement and this one, "
+        "so start there: name the specific edit you believe cost the metric, and say "
+        "which cited checkpoints it explains. If the evidence does not support the "
+        "change being at fault, say THAT plainly and give the evidence -- a wrong "
+        "revert costs an iteration exactly like a wrong redesign does.\n"
+    )
+    return "\n".join(lines) + "\n"
+
+
+def _regression_task_step(regression: dict[str, Any]) -> str:
+    """The numbered instruction that makes a revert a first-class recommendation.
+
+    Without it, the Critic's task lists only "name the component" and "give
+    prioritized changes", and a model asked for changes gives changes. `revert`
+    has to be spelled out as an allowed answer or it is not one.
+    """
+    if not regression:
+        return ""
+    return (
+        "0. START WITH THE REGRESSION. Say which edit from this iteration's diff you\n"
+        "   believe caused it, and choose ONE of:\n"
+        "     (a) REVERT -- name the exact edit to undo. This is a complete and\n"
+        "         legitimate recommendation. A loop that cannot undo its own changes\n"
+        "         can only drift, and 'revert X' is a better critique than a new\n"
+        "         mechanism invented to compensate for X.\n"
+        "     (b) KEEP AND FIX -- only if you can name what the edit got RIGHT that\n"
+        "         is worth the loss, and the specific follow-up that recovers it.\n"
+        "     (c) NOT THE CAUSE -- with the evidence that exonerates it.\n"
+        "   Put your choice in `regression_verdict` in the JSON block.\n"
+    )
+
+
+def _regression_json_keys(regression: dict[str, Any]) -> str:
+    if not regression:
+        return ""
+    return (
+        ", plus `regression_verdict` (one of `revert`, `keep_and_fix`, `not_the_cause`) "
+        "and `regression_cause` (the specific edit, in one sentence)"
+    )
+
+
 async def critic_node(state: OrchestratorState) -> dict[str, Any]:
     iteration = int(state.get("iteration_count", 1))
     phase = str(state.get("current_curriculum_phase") or "")
@@ -380,6 +489,27 @@ async def critic_node(state: OrchestratorState) -> dict[str, Any]:
         forgetting = float(state.get("forgetting_failure_rate", 1.0))
         attribution = marginal_contributions(utility, access, forgetting)
         dominant = attribution["dominant_term"]
+
+        # THE OTHER HALF OF THE ATTRIBUTION, and until now the missing half.
+        #
+        # `marginal_contributions` answers "which term is worth the most if
+        # perfected". Under MGS = U*(1-A)*(1-F) with A and F small, the answer to
+        # that question is structurally U almost regardless of the data -- and it
+        # was U in all four critiques of run-8cf58d33b311, whose real story was
+        # that iteration 3's change had knocked U from 0.4444 to 0.2222 and every
+        # subsequent iteration pushed the same lever harder. There was no verdict
+        # in the Critic's vocabulary for "the last change made this worse; undo
+        # it", so it never said so.
+        #
+        # `regression_report` answers the complementary question -- which term
+        # actually MOVED, and what that movement cost -- against the best
+        # iteration so far rather than against a hypothetical perfect one. When
+        # it is non-empty it OUTRANKS the marginal ranking in the prompt below,
+        # because a term that just fell is a fact about this run and a term that
+        # would be valuable if perfect is a fact about the metric's algebra.
+        regression = scoreboard.regression_report(state)
+        attribution["regression"] = regression
+        attribution["verdict_vs_best"] = str(report.get("verdict_vs_best") or "")
 
         # Every offender is normalized to carry a `checkpoint_id` before it is
         # formatted below. The Judge always sets one, but this report can also
@@ -414,7 +544,7 @@ async def critic_node(state: OrchestratorState) -> dict[str, Any]:
         n_mechanisms = len(mechanisms) or 1
         source_view = _source_view(str(state.get("memory_codebase") or ""))
 
-        task = f"""## PRECOMPUTED ATTRIBUTION (do not re-derive; do not argue with it)
+        task = f"""{_regression_block(regression)}## PRECOMPUTED ATTRIBUTION (do not re-derive; do not argue with it)
 current MGS         = {attribution['current_mgs']:.4f}
 dominant_term       = {dominant}
 dominant failing metric: {dominant}
@@ -423,7 +553,11 @@ MGS if each were perfect = {attribution['mgs_if_perfect']}
 raw terms           = U={utility:.4f} A={access:.4f} F={forgetting:.4f}
 
 Fixing {dominant} alone would move MGS by {attribution['dominant_gain']:+.4f}, more than
-either other term. That is the thing to fix.
+either other term. NOTE WHAT THIS RANKING IS AND IS NOT: it is a fact about the
+algebra of MGS = U*(1-A)*(1-F), not about this run. With A and F small, "perfect
+U" is worth the most almost regardless of the measurements, so this ranking will
+name U on nearly every round and naming it again is not a finding. If there is a
+REGRESSION section above, it is the finding, and it outranks this.
 
 ## COMPONENT HYPOTHESES FOR {dominant} (priors only -- the census below outranks these)
 These are generic starting guesses written before this run existed. Where they
@@ -485,7 +619,7 @@ costs a whole iteration.
 
 Write the critique:
 
-1. Address EVERY mechanism in the census, largest group first. The census is
+{_regression_task_step(regression)}1. Address EVERY mechanism in the census, largest group first. The census is
    derived from recorded counters, so a mechanism listed there happened. Do not
    collapse distinct mechanisms into a single cause because a single cause reads
    better -- {n_mechanisms} distinct mechanism(s) were observed this round.
@@ -502,7 +636,7 @@ Write the critique:
 End with a ```json block containing dominant_term, component (the primary one),
 mechanisms[] (each with name, component, kind: design|infrastructure,
 checkpoint_ids[]), evidence_checkpoint_ids and proposals[] (each with component,
-kind, change, expected_fixes[])."""
+kind, change, expected_fixes[]){_regression_json_keys(regression)}."""
 
         result, block = await agent_call_json(
             CRITIC_PROFILE, task, Path(state.get("memory_codebase") or config.PROJECT_ROOT)
@@ -522,7 +656,9 @@ kind, change, expected_fixes[])."""
                 "critic produced no usable critique (%s); emitting attribution-only critique",
                 result.error or ("tool-call markup" if markup else "no parseable json block"),
             )
-            critique = _fallback_critique(attribution, cited, worst_attacks, census)
+            critique = _fallback_critique(
+                attribution, cited, worst_attacks, census, regression
+            )
             block = {}
         else:
             # Stripped even on the happy path: a reply can carry a usable JSON
@@ -532,6 +668,12 @@ kind, change, expected_fixes[])."""
 
         attribution["component"] = block.get("component")
         attribution["proposals"] = block.get("proposals") or []
+        # The model's answer to the revert question, kept whether or not it
+        # answered: an absent verdict on a round that HAD a regression is itself
+        # worth seeing in attribution.json, and `check_learning.py` reads it.
+        if regression:
+            attribution["regression_verdict"] = str(block.get("regression_verdict") or "")
+            attribution["regression_cause"] = str(block.get("regression_cause") or "")
         # The measured decomposition, kept even when the model ignores it: it is
         # the only record of what the pipeline did, and `check_learning.py` needs
         # it to tell a design regression from a harness outage.
@@ -542,6 +684,11 @@ kind, change, expected_fixes[])."""
         )
 
         iter_dir = config.iteration_dir(iteration)
+        # THE FILE IS THE CRITIQUE, VERBATIM. Nothing is appended: the running
+        # history of earlier iterations is `runs/critique_summary.md`, which the
+        # Architect keeps, and the next Architect turn opens this file for
+        # iteration i and that notebook for iterations 1..i-1 as two separate
+        # reads. See the module docstring.
         write_artifact(iter_dir / "critique.md", critique)
         write_artifact(iter_dir / "attribution.json", attribution)
 
@@ -552,9 +699,29 @@ kind, change, expected_fixes[])."""
             attribution.get("component"), ",".join(mechanisms) or "(none)",
             len(attribution["proposals"]),
         )
+        if regression:
+            # At WARNING, and naming the verdict the model gave: a critique that
+            # was handed a regression and answered with neither a revert nor an
+            # exoneration is the case where the loop is about to build on top of
+            # a measured loss again, and it should be visible in the log at the
+            # moment it happens rather than in the post-mortem.
+            log.warning(
+                "critic iter=%d: REGRESSION vs iteration %d (%+.4f, streak %d); "
+                "worst-moving term=%s; critic verdict=%s (%s)",
+                iteration, regression.get("champion_iteration"),
+                float(regression.get("delta") or 0.0), int(regression.get("streak") or 0),
+                (regression.get("terms") or {}).get("worst_term") or "?",
+                attribution.get("regression_verdict") or "(none given)",
+                attribution.get("regression_cause") or "no cause named",
+            )
 
         return {
             "critique": critique,
+            # Stamped so the next Architect knows WHICH iteration this critique
+            # is from and summarises it into its notebook exactly once. A failed
+            # build leaves the Critic unrun and this value unchanged, which is
+            # precisely the case that would otherwise be recorded twice.
+            "critique_iteration": iteration,
             "attribution": attribution,
             "token_usage": usage_delta(result.usage),
             "node_timings": [span],
@@ -564,15 +731,51 @@ kind, change, expected_fixes[])."""
 def _fallback_critique(
     attribution: dict[str, Any], cited: list[dict[str, Any]], worst_attacks: list[Any],
     census: str = "",
+    regression: dict[str, Any] | None = None,
 ) -> str:
-    """Deterministic critique used when the Critic model is unreachable."""
+    """Deterministic critique used when the Critic model is unreachable.
+
+    THE REGRESSION SURVIVES A DEAD MODEL. Everything else here is a restatement
+    of the marginal ranking, which -- see the note in `critic_node` -- names U on
+    nearly every round whatever happened. If the run just lost MGS, that is the
+    one thing the Architect must be told, and it is computed in Python from the
+    score history, so an unreachable Critic is no reason to drop it.
+    """
     dominant = attribution["dominant_term"]
-    lines = [
+    lines: list[str] = [
         "# Critique (attribution-only fallback -- the Critic model was unreachable)",
         "",
-        "## Attribution",
+    ]
+    if regression:
+        terms = regression.get("terms") or {}
+        moved = terms.get("moved") or {}
+        cost = terms.get("delta_mgs_from") or {}
+        headline = (
+            f"Iteration {regression.get('iteration')} scored "
+            f"{float(regression.get('current_mgs') or 0.0):.4f} against iteration "
+            f"{regression.get('champion_iteration')}'s "
+            f"{float(regression.get('champion_mgs') or 0.0):.4f} "
+            f"({float(regression.get('delta') or 0.0):+.4f}), a streak of "
+            f"{int(regression.get('streak') or 0)}."
+        )
+        movement = (
+            f"Term movement: U {moved.get('U', 0.0):+.4f} (MGS {cost.get('U', 0.0):+.4f}), "
+            f"A {moved.get('A', 0.0):+.4f} (MGS {cost.get('A', 0.0):+.4f}), "
+            f"F {moved.get('F', 0.0):+.4f} (MGS {cost.get('F', 0.0):+.4f}). "
+            f"Costliest movement: {terms.get('worst_term') or 'unknown'}."
+        )
+        action = (
+            "Recommended action: REVERT this iteration's change unless there is "
+            "specific evidence it was not the cause."
+        )
+        lines += ["## !! REGRESSION", headline, movement, action, ""]
+    dominant_line = (
         f"Dominant failing term: **{dominant}** "
-        f"(perfecting it would move MGS by {attribution['dominant_gain']:+.4f}).",
+        f"(perfecting it would move MGS by {attribution['dominant_gain']:+.4f})."
+    )
+    lines += [
+        "## Attribution",
+        dominant_line,
         f"Marginal gains: {attribution['marginal']}",
         "",
         "## Hypothesised components",

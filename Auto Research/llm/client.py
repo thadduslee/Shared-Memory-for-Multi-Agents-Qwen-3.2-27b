@@ -38,6 +38,40 @@ log = logging.getLogger("orchestrator.llm")
 # Status codes worth retrying: rate limit, and the transient server-side family.
 RETRYABLE_STATUS = frozenset({408, 409, 425, 429, 500, 502, 503, 504})
 
+# 402 IS TWO DIFFERENT ERRORS WEARING ONE STATUS CODE, and telling them apart is
+# worth a whole run.
+#
+#   * "you are out of money"                     -- terminal. Retrying spends
+#                                                   the wall clock to be told
+#                                                   the same thing.
+#   * "this request would exceed your available  -- TRANSIENT. OpenRouter is
+#     credits given your current IN-FLIGHT          rate-limiting against a
+#     requests; retry after they settle"           balance, and the response
+#                                                   carries `Retry-After`.
+#
+# run-c993a6e93050 died on the second kind, at iteration 23, after 3 hours and
+# 12.5M tokens. The response said `"reason":"in_flight_budget_exhausted"` and
+# `"Retry-After":"120"`; 402 was not in RETRYABLE_STATUS, so the client returned
+# an error immediately, `route_after_architect` treated any Architect failure as
+# fatal, and the run ended. Waiting two minutes would have saved it.
+_TRANSIENT_402_MARKERS = ("in_flight", "in-flight", "settle", "concurrent")
+
+
+def _is_transient_payment_required(status: int, body: str, retry_after: str | None) -> bool:
+    """Is this 402 the rate-limit kind rather than the out-of-money kind?
+
+    Conservative in the direction that costs least: an explicit `Retry-After`
+    means the provider is telling us WHEN to come back, which an account with no
+    credit left has no reason to say. Absent that header, the body has to name
+    the in-flight condition.
+    """
+    if status != 402:
+        return False
+    if retry_after:
+        return True
+    lowered = (body or "").lower()
+    return any(marker in lowered for marker in _TRANSIENT_402_MARKERS)
+
 
 @dataclass
 class ChatResult:
@@ -163,11 +197,21 @@ class AsyncLLMClient:
         return headers
 
     @staticmethod
-    def _backoff_delay(attempt: int, retry_after: str | None) -> float:
-        """Exponential backoff with full jitter, honouring `Retry-After`."""
+    def _backoff_delay(
+        attempt: int, retry_after: str | None, max_delay: float | None = None
+    ) -> float:
+        """Exponential backoff with full jitter, honouring `Retry-After`.
+
+        `max_delay` overrides the usual `HTTP_BACKOFF_MAX_S` clamp. It exists
+        for the in-flight 402: the provider's stated wait is the authoritative
+        number there -- it is how long the requests already in flight need to
+        settle -- and clamping `Retry-After: 120` down to 30s spends every retry
+        arriving too early to succeed.
+        """
+        ceiling_cap = config.HTTP_BACKOFF_MAX_S if max_delay is None else max_delay
         if retry_after:
             try:
-                return min(float(retry_after), config.HTTP_BACKOFF_MAX_S)
+                return min(float(retry_after), ceiling_cap)
             except ValueError:
                 pass
         ceiling = min(config.HTTP_BACKOFF_BASE_S * (2**attempt), config.HTTP_BACKOFF_MAX_S)
@@ -276,13 +320,31 @@ class AsyncLLMClient:
                     await asyncio.sleep(delay)
                     continue
 
-                if response.status_code in RETRYABLE_STATUS:
+                # Headers are only consulted on an ERROR. A 200 has nothing to
+                # say about retrying, and reading them unconditionally makes the
+                # success path depend on a response attribute it never needed.
+                retry_after: str | None = None
+                transient_402 = False
+                if response.status_code >= 400:
+                    retry_after = getattr(response, "headers", {}).get("Retry-After")
+                    transient_402 = _is_transient_payment_required(
+                        response.status_code, response.text, retry_after
+                    )
+
+                if response.status_code in RETRYABLE_STATUS or transient_402:
                     last_error = f"HTTP {response.status_code}: {response.text[:300]}"
-                    delay = self._backoff_delay(attempt, response.headers.get("Retry-After"))
+                    delay = self._backoff_delay(
+                        attempt, retry_after,
+                        # A stated in-flight wait is honoured in full, up to the
+                        # per-call timeout: arriving early just burns a retry.
+                        max_delay=config.HTTP_RETRY_AFTER_MAX_S if transient_402 else None,
+                    )
                     log.warning(
-                        "role=%s route=%s status=%s attempt=%d/%d retrying in %.2fs",
+                        "role=%s route=%s status=%s attempt=%d/%d retrying in %.2fs%s",
                         role or "?", route, response.status_code,
                         attempt + 1, config.HTTP_MAX_RETRIES, delay,
+                        " (provider says the limit is on IN-FLIGHT requests, not "
+                        "on your balance)" if transient_402 else "",
                     )
                     await asyncio.sleep(delay)
                     continue

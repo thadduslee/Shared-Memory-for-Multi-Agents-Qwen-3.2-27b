@@ -1,0 +1,1 @@
+BEGIN; CREATE TABLE IF NOT EXISTS tombstone_terms (record_id TEXT NOT NULL REFERENCES tombstones(record_id) ON DELETE CASCADE, term_hash TEXT NOT NULL, PRIMARY KEY (record_id, term_hash)); CREATE INDEX IF NOT EXISTS idx_tombstone_terms_hash ON tombstone_terms(term_hash); COMMIT;

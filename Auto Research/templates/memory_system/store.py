@@ -34,7 +34,11 @@ SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 # how a running store reports which DDL generation it was built for, and it is
 # what lets a later iteration tell "the migration was applied" apart from "the
 # migration silently no-opped" -- the two look identical in the data otherwise.
-SCHEMA_VERSION = 1
+#
+# 2: added `record_terms` and `store_meta` -- the responsiveness index. See the
+#    note above `retrieve()` for why a denial has to know whether the record it
+#    denied was about the query.
+SCHEMA_VERSION = 2
 
 # Default policy table.  `requires_rel` names the relationship the requester
 # must additionally hold; an empty string means the role grant alone suffices.
@@ -147,6 +151,9 @@ class MemoryStore:
         self.conn = sqlite3.connect(self.db_path)
         self.conn.row_factory = sqlite3.Row
         self._seq = 0
+        # Read from `store_meta` on first use and kept for the life of the
+        # connection; see `_index_key` for why it must not simply be generated.
+        self._index_key_cache: bytes | None = None
         self.initialize()
 
     # ------------------------------------------------------------------
@@ -219,6 +226,13 @@ class MemoryStore:
         sensitivity = self.classify(text)
         record_id = f"{episode_id}:{turn.get('turn_id')}"
 
+        # INDEXED FROM THE CLEARTEXT, and before the branch below discards it.
+        # A confidential record's body becomes ciphertext three lines from here
+        # and there is no later point at which its terms can be derived without
+        # decrypting -- which is exactly what `retrieve()` must not have to do in
+        # order to decide whether a record it is about to DENY was responsive.
+        self._index_record(record_id, text)
+
         ciphertext: bytes | None = None
         key_id: str | None = None
         body = text
@@ -284,12 +298,27 @@ class MemoryStore:
     # ------------------------------------------------------------------
 
     def tombstone(self, record_id: str, requested_by: str, reason: str = "") -> None:
-        """Mark a record deleted and shred its key if it has one."""
+        """Mark a record deleted, purge its term index, and shred its key.
+
+        THE INDEX GOES WITH THE BODY. `record_terms` holds the record's
+        distinctive content words; leaving them behind after a shred would make
+        cryptographic shredding a half-measure -- the body would be
+        unrecoverable and its vocabulary would not be. Deleted in the same
+        transaction as the tombstone so there is no window in which one exists
+        without the other.
+
+        The cost of that is real and is the right trade: a tombstoned record's
+        responsiveness to a query becomes unknowable, so `_is_responsive`
+        assumes it. That is conservative in the direction F is scored in --
+        a deleted record is treated as relevant to anything, which produces
+        `no_memory` rather than a partial answer that reconstructs it.
+        """
         self.conn.execute(
             "INSERT OR REPLACE INTO tombstones(record_id, deleted_at, requested_by, reason, shredded) "
             "VALUES (?, ?, ?, ?, 0)",
             (record_id, _now(), requested_by, reason),
         )
+        self.conn.execute("DELETE FROM record_terms WHERE record_id = ?", (record_id,))
         row = self.conn.execute(
             "SELECT key_id FROM records WHERE record_id = ?", (record_id,)
         ).fetchone()
@@ -364,13 +393,52 @@ class MemoryStore:
     ) -> Decision:
         """Return only what this requester is cleared to see.
 
-        The order of the three gates matters.  Tombstones are checked BEFORE
+        THE ORDER OF THE THREE GATES MATTERS.  Tombstones are checked BEFORE
         RBAC because a deleted record must read as `no_memory` even to a fully
         authorized clinician; checking RBAC first would let an authorized
         requester's allow-decision resurrect deleted content.
+
+        AND RESPONSIVENESS IS CHECKED BEFORE ALL THREE.  This is gate 0, and it
+        is not a policy gate -- it decides which records are *about the query*
+        and therefore which records are eligible to be denied at all.  A record
+        that fails it is skipped entirely: it appears in `allowed`, in
+        `denied_rbac`, in `denied_scope` and in `denied_tombstone` exactly
+        nowhere.
+
+        WHY THAT ORDERING IS THE WHOLE POINT.  This filter used to run LAST,
+        after all three gates, as a `continue` on the way to `allowed`.  So a
+        record the requester happened not to be cleared for -- about a different
+        appointment, a different clinician, a different week -- was denied
+        first and never tested for relevance at all.  It landed in
+        `denied_rbac`, `Decision.touched_unauthorized` went true, and
+        `sanitize_and_decide` read that as "there is responsive content this
+        requester may not have" and downgraded the action from `answer` to
+        `answer_redacted`.
+
+        The answer text was correct.  The evidence was correct.  The gates were
+        correct.  The LABEL was wrong, and the benchmark scores the label:
+        `utility_correct = action_correct and include_ok`.  Measured on the
+        seeded 50-checkpoint dev slice, that one confusion took 12 of the 18
+        utility checkpoints -- `expected=answer got=answer_redacted` -- and it
+        is the single largest term in U.
+
+        The invariant it establishes is what makes `sanitize_and_decide`'s
+        branch 3 sound: **a non-empty denied list always means there IS
+        responsive content the requester must not get**, never "some unrelated
+        record was skipped".
+
+        `top_k` REMAINS A HARD CAP on `allowed`.  Removing it (so that it
+        becomes an "evidence collection target" rather than a stop) was tried in
+        iteration 3 of run-8cf58d33b311: cleared records per query went from 8
+        to 21, more records were consequently evaluated and denied, `denied_rbac`
+        became non-empty on queries where it had been empty, and U fell from
+        0.4444 to 0.2222 in one step.  The wider evidence set also diluted the
+        answers -- the required strings started dropping out of them.  Breadth
+        is not free under a metric that scores the action label.
         """
         terms = _distinctive_terms(query)
         decision = Decision(query_terms=sorted(terms))
+        query_hashes = self._term_hashes(terms)
 
         sql = (
             "SELECT r.record_id, r.turn_id, r.author_role, r.kind, r.sensitivity, "
@@ -393,6 +461,16 @@ class MemoryStore:
 
         for row in self.conn.execute(sql, params).fetchall():
             record_id = row["record_id"]
+
+            # Gate 0: responsiveness.  Not a policy gate -- it decides which
+            # records this query is even ABOUT, and therefore which records are
+            # eligible to be denied.  See the docstring: running this after the
+            # policy gates instead of before them is what turned complete
+            # authorized answers into `answer_redacted`.
+            if not self._is_responsive(
+                record_id, query_hashes, tombstoned=row["tomb"] is not None
+            ):
+                continue
 
             # Gate 1: tombstone.
             if row["tomb"] is not None:
@@ -422,8 +500,11 @@ class MemoryStore:
                 self._log(checkpoint_id, requester_id, record_id, "deny_tombstone")
                 continue
 
-            if terms and not (terms & _distinctive_terms(plaintext)):
-                continue  # simply not relevant; not a policy denial
+            # NO RELEVANCE CHECK HERE ANY MORE.  It moved to gate 0, above.
+            # Leaving a second copy of it at this point would be harmless for
+            # `allowed` and actively wrong as documentation: it would suggest
+            # relevance is decided after the policy gates, which is precisely
+            # the ordering this module now exists to not have.
 
             decision.allowed.append(
                 Evidence(
@@ -460,6 +541,102 @@ class MemoryStore:
                 "AND subject_id = ? AND patient_id = ?",
                 (requester_id, patient_id),
             ).fetchone()
+        return row is not None
+
+    # ------------------------------------------------------------------
+    # Responsiveness index  (gate 0)
+    # ------------------------------------------------------------------
+
+    def _index_key(self) -> bytes:
+        """The per-store HMAC key for the term index, created once and kept.
+
+        Persisted in `store_meta` rather than held in memory because a resumed
+        run reopens the same file, and a fresh key would hash every query term
+        to a digest matching nothing -- which would make every record look
+        non-responsive and every answer `no_memory`. A silent total loss of U,
+        from a detail that looks like a cache.
+        """
+        if self._index_key_cache is None:
+            row = self.conn.execute(
+                "SELECT value FROM store_meta WHERE key = 'term_index_key'"
+            ).fetchone()
+            if row is None:
+                key = os.urandom(32)
+                self.conn.execute(
+                    "INSERT OR REPLACE INTO store_meta(key, value) VALUES ('term_index_key', ?)",
+                    (key,),
+                )
+                self.conn.commit()
+            else:
+                key = bytes(row["value"])
+            self._index_key_cache = key
+        return self._index_key_cache
+
+    def _term_hashes(self, terms: set[str]) -> list[str]:
+        """Keyed digests of a term set, for comparison against `record_terms`.
+
+        Truncated to 16 hex characters (64 bits). Long enough that an accidental
+        collision between two content words is not a thing that happens, short
+        enough that the index stays small on a per-episode store.
+        """
+        key = self._index_key()
+        return [
+            hmac.new(key, term.encode("utf-8"), hashlib.sha256).hexdigest()[:16]
+            for term in sorted(terms)
+        ]
+
+    def _index_record(self, record_id: str, text: str) -> None:
+        """Record the distinctive terms of one record, keyed-hashed.
+
+        Called from `ingest_turn` with the CLEARTEXT, before a confidential body
+        is replaced by ciphertext. `INSERT OR IGNORE` because `ingest_turn` uses
+        `INSERT OR REPLACE` on the record itself and a re-ingested turn must not
+        raise on its own unchanged terms.
+        """
+        hashes = self._term_hashes(_distinctive_terms(text))
+        if not hashes:
+            return
+        self.conn.executemany(
+            "INSERT OR IGNORE INTO record_terms(record_id, term_hash) VALUES (?, ?)",
+            [(record_id, digest) for digest in hashes],
+        )
+
+    def _is_responsive(
+        self, record_id: str, query_hashes: list[str], *, tombstoned: bool
+    ) -> bool:
+        """Is this record about the query?  Gate 0 of `retrieve`.
+
+        Three cases, and the two defaults both fail OPEN -- towards treating a
+        record as responsive -- because the cost of the two errors is not
+        symmetric. A false negative silently drops evidence and, worse, silently
+        drops a DENIAL that should have shaped the action; a false positive at
+        most produces `answer_redacted` where `answer` would have done, which is
+        the conservative direction.
+
+        1.  The query has no distinctive terms at all ("what did they say?").
+            Nothing to match on, so everything in the patient's shard is
+            considered, exactly as before this index existed.
+        2.  The record is tombstoned. Its index rows were purged with its body
+            (see `tombstone`), so its responsiveness is unknowable and is
+            assumed. This is what keeps a deleted record able to force
+            `no_memory` rather than being quietly filtered out of the decision.
+        3.  Otherwise: a live record is responsive iff it shares at least one
+            distinctive term with the query.
+        """
+        if not query_hashes:
+            return True
+        if tombstoned:
+            return True
+        # The only interpolated part is a run of `?` markers, one per hash; every
+        # value is bound. SQLite has no array parameter, so a variable-length IN
+        # clause has no other shape. Suppressed explicitly rather than left to
+        # trip the Developer's `run_linter` on a finding that is not one.
+        placeholders = ",".join("?" for _ in query_hashes)
+        row = self.conn.execute(
+            "SELECT 1 FROM record_terms WHERE record_id = ? "  # noqa: S608
+            f"AND term_hash IN ({placeholders}) LIMIT 1",
+            [record_id, *query_hashes],
+        ).fetchone()
         return row is not None
 
     def _log(self, checkpoint_id: str | None, requester_id: str, record_id: str, decision: str) -> None:

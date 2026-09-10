@@ -174,6 +174,15 @@ def _final(**overrides):
     base = {
         "compile_ok": True, "tests_ok": False, "migration_ok": False,
         "lint_ok": True, "smoke_ok": False,
+        # `run_tests` RAN and failed; `sql_exec` was never reached. These are
+        # different facts about the design and the report must not merge them --
+        # see `nodes/developer.py::gate_status`.
+        "gate_attempts": {
+            "compile_ok": {"ran": 1, "ok": True},
+            "tests_ok": {"ran": 2, "ok": False},
+        },
+        "transport_failures": 0,
+        "transport_errors": [],
         "pass_rate": 0.83,
         "retry_count": config.MAX_DEV_RETRIES,
         "last_stack_trace": TRACE,
@@ -243,8 +252,14 @@ def test_a_green_build_produces_no_block_at_all() -> None:
 def test_the_block_carries_the_gates_the_error_and_the_trace() -> None:
     block = _developer_failure_block({"dev_failure_report": _report()})
     assert "COULD NOT BUILD" in block
-    assert "tests_ok (set by `run_tests`)" in block
-    assert "migration_ok (set by `sql_exec`)" in block
+    # THE TWO KINDS OF UNMET GATE, TOLD APART. `run_tests` ran and failed;
+    # `sql_exec` was never called. Rendering both as "unmet mandatory gates"
+    # is what let run-8cf58d33b311's iteration 2 -- which never invoked either
+    # tool -- reach the Architect as a test failure and provoke a redesign.
+    assert "gates that RAN AND FAILED: tests_ok (`run_tests`)" in block
+    assert "NEVER RUN" in block
+    assert "migration_ok (`sql_exec` was never called)" in block
+    assert "this is not evidence that they would fail" in block
     assert "AssertionError: leaked 2 records" in block
     assert "memory_system/store.py" in block
     assert "test_scoped_retrieve" in block          # the trace
@@ -348,6 +363,6 @@ def test_truncation_never_drops_the_instruction_or_the_gates() -> None:
     """The parts that change what the Architect DOES survive; detail is what goes."""
     block = _developer_failure_block(
         {"dev_failure_report": _report(failures=_twenty_distinct_failures())})
-    assert "tests_ok (set by `run_tests`)" in block
+    assert "gates that RAN AND FAILED: tests_ok (`run_tests`)" in block
     assert "dev_failure_mitigations" in block
     assert "omitted for length" in block

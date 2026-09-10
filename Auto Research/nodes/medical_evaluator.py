@@ -253,8 +253,14 @@ async def eval_dispatch_node(state: OrchestratorState) -> dict[str, Any]:
                 "curriculum_phase": phase,
                 "checkpoint_ids": chunk,
                 "phase_checkpoint_ids": [cid for cid in chunk if cid in phase_id_set],
-                "manifest_path": str(manifest),
-                "episodes_path": str(episodes_path),
+                # Resolved, not as-written: `_run_retrieval_shard` launches the
+                # child with `cwd=workspace`, so a relative path here is read
+                # relative to the workspace and raises FileNotFoundError in
+                # every shard at once.  `config.RUNS_DIR` is absolute, which
+                # makes these absolute already; resolving is the belt to that
+                # brace, and costs a stat.
+                "manifest_path": str(manifest.resolve()),
+                "episodes_path": str(episodes_path.resolve()),
                 "workspace": str(workspace.resolve()),
             })
         for shard in shards:
@@ -389,6 +395,41 @@ if __name__ == "__main__":
 '''
 
 
+def _clip_keeping_tail(text: str, limit: int) -> str:
+    """Clip the MIDDLE out of an over-long message, never the end.
+
+    Head-only truncation is what made run-86c51cd90e1e undebuggable: both the
+    log line and the shard report kept the "produced no result" banner and threw
+    away the exception that explained it.
+    """
+    text = text.strip()
+    if len(text) <= limit:
+        return text
+    head = limit // 3
+    tail = limit - head - 5
+    return f"{text[:head]}\n...\n{text[-tail:]}"
+
+
+def _diagnosis(exc: BaseException, limit: int = 400) -> str:
+    """One log line that still contains the cause.
+
+    A shard failure message is `"retrieval shard 3 produced no result"` followed
+    by the CHILD's traceback, so the useful part -- the last line, the actual
+    exception -- is at the END.  Truncating from the front (`str(exc)[:200]`)
+    kept the banner and dropped the diagnosis: run-86c51cd90e1e logged
+    `sys.exit(ma` five times an iteration for seven iterations and never once
+    printed the `FileNotFoundError` that was causing it.  Keep the first line
+    for context and the last non-empty line for the reason.
+    """
+    text = str(exc).strip()
+    lines = [line for line in text.splitlines() if line.strip()]
+    if not lines:
+        return repr(exc)
+    head, tail = lines[0], lines[-1]
+    joined = head if head == tail else f"{head} | {tail}"
+    return joined if len(joined) <= limit else joined[: limit - 1] + "\u2026"
+
+
 async def _run_retrieval_shard(shard: dict[str, Any]) -> list[dict[str, Any]]:
     """Phase 1: child process, no model.  Raises on infrastructure failure."""
     workspace = Path(shard["workspace"])
@@ -491,13 +532,25 @@ Respond with exactly one ```json fenced block."""
             text, usage, ok = dsh.text, dsh.usage, dsh.ok
 
     if not ok:
-        # The retrieval layer's own decision is a safe fallback: it already
-        # applied every gate. Its `answer` is the joined bodies of the records
-        # that cleared them, so serving it loses the phrasing the model would
-        # have added but not the content -- which is the right way round when
-        # the alternative is scoring a transport blip as a design failure.
+        # The retrieval layer's own decision is a safe fallback for ONE
+        # checkpoint: it already applied every gate, and its `answer` is the
+        # joined bodies of the records that cleared them, so serving it loses
+        # the phrasing the model would have added but not the content -- the
+        # right way round when the alternative is scoring a transport blip as a
+        # design failure.
+        #
+        # IT IS NOT A SAFE FALLBACK FOR A WHOLE RUN, and until `degraded` was
+        # reported nothing distinguished the two. run-c993a6e93050 spent 3
+        # hours and 12.5M tokens with the vLLM evaluator unreachable -- 7,496
+        # ConnectErrors, EVERY render taking this branch, 0 of 357 answering
+        # predictions rendered by a model -- and reported `best MGS=0.8366`
+        # with no caveat anywhere. Those numbers are real measurements of a
+        # DIFFERENT system: the gating layer with raw evidence pasted in as the
+        # answer. The flag is what lets the collector, the Judge and the
+        # scoreboard say so.
         return {"action": record.get("action", "refuse"),
                 "answer": str(record.get("answer") or ""),
+                "degraded": True,
                 "used_record_ids": record.get("used_record_ids", [])}, usage
 
     parsed = extract_json_block(text) or {}
@@ -562,6 +615,11 @@ async def eval_worker_node(shard: WorkerState) -> dict[str, Any]:
         rendered: list[dict[str, Any]] = []
         usages: list[dict[str, int]] = []
         errors: list[dict[str, Any]] = []
+        # How many checkpoints needed the answerer, and how many of those it
+        # failed to answer. The ratio is the run's single best signal that the
+        # numbers about to be computed describe the system you think they do.
+        n_answering = 0
+        n_degraded = 0
         for record in records:
             if record.get("error"):
                 errors.append(record)
@@ -569,6 +627,8 @@ async def eval_worker_node(shard: WorkerState) -> dict[str, Any]:
             if record.get("action") in {"answer", "answer_redacted"}:
                 output, usage = await _render_answer(record, phase)
                 usages.append(usage)
+                n_answering += 1
+                n_degraded += int(bool(output.get("degraded")))
             else:
                 # refuse / no_memory need no generation: the text is fixed by
                 # policy, and sending them to the model would only create an
@@ -604,6 +664,8 @@ async def eval_worker_node(shard: WorkerState) -> dict[str, Any]:
             "shard_index": index, "stage": stage, "iteration": iteration,
             "ok": True, "skipped": False, "n": len(rendered),
             "n_errors": len(errors),
+            "n_answering": n_answering,
+            "n_render_degraded": n_degraded,
             "path": str(shard_file),
             "phase_checkpoint_ids": shard.get("phase_checkpoint_ids", []),
             "duration_s": round(time.monotonic() - started, 3),
@@ -625,13 +687,16 @@ async def eval_worker_node(shard: WorkerState) -> dict[str, Any]:
         trace = traceback.format_exc()
         signature = signature_from_trace(trace, category="eval_shard")
         breaker.record(signature)
-        log.error("shard %d failed: %s", index, str(exc)[:200])
+        log.error("shard %d failed: %s", index, _diagnosis(exc))
         return {
             "eval_results": [{
                 "shard_index": index, "stage": stage, "iteration": iteration,
                 "ok": False, "skipped": False, "n": 0,
                 "failure_signature": signature,
-                "error": str(exc)[:500], "trace": trace[-2000:],
+                # Tail-preserving for the same reason the log line is: the
+                # child's traceback ends with the cause, and `[:500]` cut the
+                # `FileNotFoundError` off mid-path in the report the Critic reads.
+                "error": _clip_keeping_tail(str(exc), 1200), "trace": trace[-2000:],
                 "duration_s": round(time.monotonic() - started, 3),
             }],
             "failure_signature": signature,
@@ -679,14 +744,48 @@ async def eval_collect_node(state: OrchestratorState) -> dict[str, Any]:
         skipped = [r for r in failures if r.get("skipped")]
         breaker = breaker_for(iteration, stage)
 
+        # THE ANSWERER'S HEALTH, aggregated across the whole stage.
+        #
+        # WHY IT IS COMPUTED HERE AND SHOUTED ABOUT. A render that fails falls
+        # back to the gated record bodies (see `_render_answer`), which is right
+        # for one checkpoint and catastrophic as a silent default for a whole
+        # run: the pipeline keeps producing predictions, the Judge keeps scoring
+        # them, and the numbers describe the retrieval layer with raw evidence
+        # pasted in rather than the system under test.
+        #
+        # run-c993a6e93050 did exactly that for 23 iterations and 12.5M tokens
+        # with the local vLLM server down. Nothing in the run said so. The
+        # summary reported `best MGS=0.8366`.
+        n_answering = sum(int(r.get("n_answering", 0)) for r in results if r.get("ok"))
+        n_degraded = sum(int(r.get("n_render_degraded", 0)) for r in results if r.get("ok"))
+        degraded_rate = (n_degraded / n_answering) if n_answering else 0.0
+        degraded = degraded_rate >= config.RENDER_DEGRADED_THRESHOLD
+
         write_artifact(stage_path / "shard_report.json", {
             "n_shards": len(results),
             "n_failed": len(failures),
             "n_skipped": len(skipped),
             "n_predictions": written,
+            "n_answering": n_answering,
+            "n_render_degraded": n_degraded,
+            "render_degraded_rate": round(degraded_rate, 4),
+            "render_degraded": degraded,
             "circuit_breaker_signature": breaker.tripped_signature,
             "shards": results,
         })
+
+        if n_degraded:
+            level = log.error if degraded else log.warning
+            level(
+                "ANSWERER DEGRADED iter=%d stage=%s: %d of %d answering checkpoints "
+                "fell back to raw evidence because the evaluator model did not "
+                "respond (%.0f%%). These predictions were NOT written by a model, "
+                "so U/A/F/MGS for this stage measure the gating layer with record "
+                "bodies pasted in as the answer -- not the system under test. "
+                "Check that %s is reachable.",
+                iteration, stage, n_degraded, n_answering, degraded_rate * 100,
+                config.VLLM_BASE_URL,
+            )
 
         log.info(
             "collect iter=%d stage=%s: %d predictions from %d/%d shards "
@@ -697,10 +796,16 @@ async def eval_collect_node(state: OrchestratorState) -> dict[str, Any]:
         span["n_predictions"] = written
         span["n_failed_shards"] = len(failures)
 
+        span["n_render_degraded"] = n_degraded
+        span["render_degraded"] = degraded
+
         update: dict[str, Any] = {
             "predictions_path": str(predictions_path),
             "n_checkpoints_evaluated": written,
             "n_worker_failures": len(failures),
+            "render_degraded": degraded,
+            "render_degraded_rate": round(degraded_rate, 4),
+            "n_render_degraded": n_degraded,
             "node_timings": [span],
         }
         if breaker.is_tripped:

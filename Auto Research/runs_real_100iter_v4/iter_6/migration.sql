@@ -1,0 +1,1 @@
+-- No migration statements needed. Gate-1 threshold and answer-verification changes are pure Python (store.py / agent.py).

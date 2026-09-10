@@ -13,6 +13,7 @@ editing code and a test can assert on it without mocking mocks.
     MOCK_SCENARIO=curriculum_fail       the active phase fails -> later phases halted
     MOCK_SCENARIO=budget_exhausted      budget guard trips -> END with halt_reason
     MOCK_SCENARIO=max_iterations        never reaches target -> stops at MAX_ITERATIONS
+    MOCK_SCENARIO=regression            MGS falls every round -> rollback to the champion
 
 Run `python main.py --list-scenarios` to print this table at runtime.
 """
@@ -147,6 +148,50 @@ SCENARIOS: dict[str, Scenario] = {
         name="max_iterations",
         description="MGS improves but never reaches MGS_TARGET; the loop stops at MAX_ITERATIONS",
         default=RoundSpec(utility=0.83, access=0.08, forgetting=0.06),
+    ),
+    # ---- 9. The loop walks away from its own best answer. ----
+    #
+    # run-8cf58d33b311, REPRODUCED. Its real dev-slice scores, iteration by
+    # iteration: 0.3172, then 0.2222, then 0.1830, then 0.1190. Every design
+    # predicted a rise; every measurement was a fall; and nothing in the loop
+    # could see the difference, so iteration N+1 inherited iteration N's code
+    # each time and the run ended on the worst workspace it had ever produced,
+    # reporting `best MGS=0.1190`.
+    #
+    # This scenario is the offline regression test for all of that: with it,
+    # `python main.py --scenario regression` must roll the workspace back to
+    # iteration 1, tell the Architect it did, hand the Critic a revert decision
+    # to make, and finish by naming iteration 1 as the best. See
+    # tests/test_graph_paths.py and docs/self_correction.md.
+    # ---- 9. Linear lineage with a build failure in the middle. ----
+    "failed_build_midrun": Scenario(
+        name="failed_build_midrun",
+        description=(
+            "iterations 1, 2 and 4 build and improve; iteration 3's build fails. "
+            "Under linear lineage iteration 4 must inherit iteration 2 -- the last "
+            "tree whose gates passed -- while still being told why 3 failed"
+        ),
+        default=RoundSpec(utility=0.80, access=0.10, forgetting=0.00),
+        rounds={
+            (1, "dev"): RoundSpec(utility=0.50, access=0.10, forgetting=0.00),
+            (2, "dev"): RoundSpec(utility=0.60, access=0.10, forgetting=0.00),
+            (4, "dev"): RoundSpec(utility=0.70, access=0.10, forgetting=0.00),
+        },
+        developer_fail_iterations=frozenset({3}),
+    ),
+    "regression": Scenario(
+        name="regression",
+        description=(
+            "MGS falls every iteration (run-8cf58d33b311's real scores); the loop "
+            "must roll back to the champion instead of building on the loss"
+        ),
+        default=RoundSpec(utility=0.1667, access=0.1765, forgetting=0.1333),
+        rounds={
+            (1, "dev"): RoundSpec(utility=0.4444, access=0.1765, forgetting=0.1333),
+            (2, "dev"): RoundSpec(utility=0.2222, access=0.0000, forgetting=0.0000),
+            (3, "dev"): RoundSpec(utility=0.2222, access=0.1176, forgetting=0.0667),
+            (4, "dev"): RoundSpec(utility=0.1667, access=0.1765, forgetting=0.1333),
+        },
     ),
 }
 

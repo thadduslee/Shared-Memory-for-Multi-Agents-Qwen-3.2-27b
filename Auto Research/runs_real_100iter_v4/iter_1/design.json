@@ -1,0 +1,19 @@
+{
+  "targets_metric": "U (utility_accuracy on authorized/authorized-scope queries)",
+  "expected_tradeoff": "Slight increase in gate-0 recall may turn a small number of borderline 'answer' queries into 'answer_redacted' or add a semantically weak overlap match to an evidence bucket, costing a few U checkpoints; in exchange, query-side phrasing variation and overlap-aware top_k filler should win back substantially more authorized-query hits. A and F are protected by leaving the RBAC join, gate order, tombstones, and sharding untouched, and the forgetting path actually hardens (ciphertext no longer outlives the key).",
+  "retrieval_loop": "Same three gates and same ordering as baseline (responsiveness before tombstone before RBAC before scope, so a denial list always means responsive content was withheld). Change is confined to gate-0 term derivation and candidate order: (1) the distinctive-term set now includes deterministic one-step morphological variants (suffix-reduced forms) applied identically at ingest (when populating record_terms) and at query time (when hashing query terms), keyed under the same per-store HMAC key so the store survives reopen; (2) candidates from the patient shard are collected with an overlap count instead of a boolean hit and are ordered overlap-desc, seq-desc before the top_k cap consumes them; (3) tombstoned records remain conservatively responsive and empty queries remain responsive to everything, preserving the no_memory branch and the hard cap.",
+  "forgetting_mechanism": "Deletion remains an explicit tombstone plus cryptographic shred, never a hard DELETE, so the store keeps non-answerable knowledge of deletion. tombstone() purges record_terms rows and uses shred() for encrypted rows; shred() now also zeroes the record's ciphertext column in the same transaction as nulling key_material, so neither plaintext nor recoverable ciphertext survives a shred. Plaintext bodies are overwritten to ''. Re-ingestion of similar text cannot resurrect a tombstoned record.",
+  "work_order": [
+    "memory_system/store.py: add a pure module-level _morph_terms(text) helper returning {token | one stem-form variant} under conservative suffix rules (plural/es and ing/ed removal on sufficiently long tokens); keep _distinctive_terms output a subset so no existing index rows vanish.",
+    "memory_system/store.py: in MemoryStore._index_record, derive the stored digest set from _distinctive_terms(text) union _morph_terms(text), still under _index_key(); update _term_hashes callers if needed so ingest and query stay symmetric.",
+    "memory_system/store.py: in MemoryStore._is_responsive, accept the widened query hash set and compute a term-overlap count for live records instead of a single matched-term boolean; keep named default true for empty-query and tombstoned cases.",
+    "memory_system/store.py: reorder retrieve()'s scan to collect candidates with overlap, sort by (overlap desc, seq desc) and enforce the top_k cap only on the allowed list so the count stays exactly 8 for the regression test.",
+    "memory_system/store.py: in shred(), zero the ciphertext bytes (write x'' and clear key_id) inside the existing transaction, then run the deletion test suite to confirm key/material shred audit rows still read as expected.",
+    "tests/test_utility_focus.py: add a deterministic no-LLM test proving variant recall (authorized clinician retrieves 'results' when record says 'result') and proving the top_k pick prefers higher-overlap allowed evidence over a lower-overlap but newer piece.",
+    "schema.sql / migration path: append the composite idx_record_terms_lookup CREATE INDEX (one line: serves both directions of the gate-0 overlap probe), leaving every existing table definition and index untouched."
+  ],
+  "prior_art": [],
+  "dev_failure_mitigations": null,
+  "responds_to_dev_failure": null,
+  "critique_recap_added": []
+}

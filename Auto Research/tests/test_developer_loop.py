@@ -276,7 +276,7 @@ async def test_the_retry_budget_still_ends_the_episode(monkeypatch, tmp_path) ->
 async def test_the_turn_ceiling_ends_a_loop_that_never_fails(monkeypatch, tmp_path) -> None:
     """MAX_DEV_RETRIES counts FAILURES, so green busywork is bounded by this."""
     workspace = _workspace(tmp_path)
-    monkeypatch.setattr(dev, "_MAX_TURNS", 5)
+    monkeypatch.setattr(config, "DEVELOPER_MAX_TURNS", 5)
     # `list_dir` is green, informative-looking, and moves no gate. The path
     # CHANGES every turn so the duplicate-call guard never fires -- otherwise
     # this would be testing that guard rather than the ceiling.
@@ -354,7 +354,7 @@ async def test_pruning_keeps_whole_turns(monkeypatch, tmp_path) -> None:
     """Cutting mid-turn strands a `tool` message whose call is gone."""
     workspace = _workspace(tmp_path)
     monkeypatch.setattr(dev, "_KEEP_TURNS", 2)
-    monkeypatch.setattr(dev, "_MAX_TURNS", 6)
+    monkeypatch.setattr(config, "DEVELOPER_MAX_TURNS", 6)
     paths = [".", "memory_system", "tests"]
     _script(monkeypatch, [
         _native([_call("list_dir", f"c{i}", path=paths[i % len(paths)])]) for i in range(8)

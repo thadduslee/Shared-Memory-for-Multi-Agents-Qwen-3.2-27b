@@ -1,0 +1,111 @@
+{
+  "current_mgs": 0.444444,
+  "mgs_if_perfect": {
+    "U": 1.0,
+    "A": 0.444444,
+    "F": 0.444444
+  },
+  "marginal": {
+    "U": 0.555556,
+    "A": 0.0,
+    "F": 0.0
+  },
+  "ranked": [
+    "U",
+    "A",
+    "F"
+  ],
+  "dominant_term": "U",
+  "dominant_gain": 0.555556,
+  "raw": {
+    "U": 0.4444444444444444,
+    "A": 0.0,
+    "F": 0.0
+  },
+  "regression": {},
+  "verdict_vs_best": "improved",
+  "component": "MemoryStore.retrieve PASS-2 top_k cap + tombstone gate-0 fail-open default",
+  "proposals": [
+    {
+      "component": "store.py retrieve(), gates 2 & 3",
+      "kind": "design",
+      "change": "Raise the answer-bearing threshold from `overlap - structural > 0` to `overlap - structural >= 2` when incrementing query_answer_denials, so a single incidental shared content token cannot redact a complete answer.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04"
+      ]
+    },
+    {
+      "component": "tombstone responsiveness (deletion visibility)",
+      "kind": "design",
+      "change": "Add table tombstone_terms(record_id, term_hash); copy a record's term digests into it inside tombstone() before purging record_terms; change _is_responsive's tombstoned branch to count overlap against tombstone_terms instead of returning _DEFAULT_OVERLAP, so only genuinely related deletions force no_memory.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_09",
+        "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_13",
+        "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_22",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16"
+      ]
+    },
+    {
+      "component": "MemoryStore.retrieve() PASS-2 top_k cap",
+      "kind": "design",
+      "change": "Lift the break `if len(decision.allowed) >= top_k` for live candidate records that share a substantive (non-structural) content term with the query, so sparse-term logistics/contact records that carry the gold content survive the cap without widening the denied lists (which stay bounded by gate outcomes, not by allowed count).",
+      "expected_fixes": [
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_015_ms_relapse_deleted_cedar_bridge_line_ckpt_08",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ]
+    }
+  ],
+  "observed_mechanisms": [
+    "answered_but_content_missing",
+    "evidence_withheld",
+    "wrong_action_shape"
+  ],
+  "mechanisms": [
+    {
+      "name": "answered_but_content_missing",
+      "component": "MemoryStore.retrieve() PASS-2 candidate collection (top_k=8 hard cap, overlap-rank ordering)",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_015_ms_relapse_deleted_cedar_bridge_line_ckpt_08",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ]
+    },
+    {
+      "name": "evidence_withheld",
+      "component": "store.py _is_responsive tombstoned default (_DEFAULT_OVERLAP=1000) + sanitize_and_decide branch 1",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_09",
+        "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_13",
+        "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_22",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16"
+      ]
+    },
+    {
+      "name": "wrong_action_shape",
+      "component": "store.py retrieve() gate-2/gate-3 answer-bearing classification (overlap - structural > 0)",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04"
+      ]
+    }
+  ],
+  "evidence_checkpoint_ids": [
+    "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+    "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_09",
+    "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+    "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+    "med_episode_rewrite_en_015_ms_relapse_deleted_cedar_bridge_line_ckpt_08",
+    "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_13",
+    "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_22",
+    "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+    "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+    "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+  ]
+}

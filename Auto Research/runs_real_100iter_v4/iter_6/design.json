@@ -1,0 +1,21 @@
+{
+  "targets_metric": "U \u2014 restores fully-answered checkpoints that were downgraded to answer_redacted/no_memory by a single weak tombstone overlap (ckpt_13) and ensures logistics tokens in cleared answers survive summarization (the six answered_but_content_missing checkpoints).",
+  "expected_tradeoff": "Costs a small F-risk margin in the narrow case where a live answer with independent evidence weakly overlaps (1 digest) a genuinely-relevant tombstone; the >=2 real-content bar and the no-live-branch no_memory fallback keep this bounded and preserve all existing test_forgetting / test_action_shape contracts. A stays flat because this never releases a denied record; only the override threshold changes. Net expected: U up (six-plus-one checkpoints), A ~0.0588 unchanged, F ~0 unchanged -> MGS toward 0.85.",
+  "retrieval_loop": "Gate order preserved (gate 0 responsiveness \u2192 gate 1 tombstone \u2192 gate 2 role \u2192 gate 3 relationship/scope). NEW gate-1 rule in retrieve(): (a) precompute has_live_responsive = any non-tombstoned row with content overlap >= 1 in the same episode/shards; (b) if has_live_responsive is true, admit a tombstoned record into denied_tombstone only when its is_structural=0 real-content overlap with the query is >= 2; (c) if has_live_responsive is false (no live candidate anywhere), keep conservative behavior \u2014 admit on any overlap, or even zero overlap when the tombstone was indexed, to preserve no_memory. No change to the candidate scan, top-k cap, sort keys, or RBAC join.",
+  "forgetting_mechanism": "Unchanged: tombstone() copies record_terms into tombstone_terms, purges record_terms, and shreds crypto key / zeroes ciphertext in one transaction. This iteration adjusts only the override threshold in gate 1 so a weak tombstone overlap does not blank a complete live answer; shredding itself is untouched.",
+  "work_order": [
+    "memory_system/store.py \u2014 in retrieve(), during PASS-1 candidate collection, compute a single boolean has_live_responsive over the pre-gate candidates (any row with row['tomb'] is None that passes _is_responsive count > 0). Keep the candidate tuple and sort as-is.",
+    "memory_system/store.py \u2014 in PASS-2 gate 1, replace the unconditional `if row['tomb'] is not None: decision.denied_tombstone.append(...)` with: let content = self._is_responsive(record_id, content_hashes, tombstoned=True). If has_live_responsive is True, admit to denied_tombstone only when content >= 2; if has_live_responsive is False, admit on count >= 1 (or on total > 0 when content_hashes empty) so the conservative assumed-responsive unit test still passes.",
+    "memory_system/agent.py \u2014 in GateMemAgent.query(), after the llm render / deterministic join, scan decision.allowed bodies for logistics tokens via regexes (dates, times, phone-like patterns, dose/instruction fragments). For any token present in allowed bodies but absent verbatim in the final answer string, append '\\nRequired logistics details: ' + '<token>: <body-fragment>' to the answer. Only ever re-emit content already cleared by all gates; never touch the action label or used_record_ids."
+  ],
+  "prior_art": [],
+  "dev_failure_mitigations": null,
+  "responds_to_dev_failure": null,
+  "critique_recap_added": [
+    {
+      "iteration": 5,
+      "kind": "critique",
+      "summary": "Previous critique found U dominant (marginal 0.366 vs A 0.036, F 0) with two decision-layer mechanisms. M1 answered_but_content_missing: six checkpoints where allowed=12..16 cleared verbatim bodies reached the answerer yet gold date/phone/dose strings were dropped \u2014 blamed the self.llm answer boundary, not retrieval, and warned the injected prompt may be harness-capped. M2 evidence_withheld: ..."
+    }
+  ]
+}

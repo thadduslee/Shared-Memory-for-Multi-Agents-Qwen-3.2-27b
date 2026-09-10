@@ -1,0 +1,105 @@
+{
+  "current_mgs": 0.539216,
+  "mgs_if_perfect": {
+    "U": 0.882353,
+    "A": 0.611111,
+    "F": 0.539216
+  },
+  "marginal": {
+    "U": 0.343137,
+    "A": 0.071895,
+    "F": 0.0
+  },
+  "ranked": [
+    "U",
+    "A",
+    "F"
+  ],
+  "dominant_term": "U",
+  "dominant_gain": 0.343137,
+  "raw": {
+    "U": 0.6111111111111112,
+    "A": 0.11764705882352941,
+    "F": 0.0
+  },
+  "regression": {
+    "verdict": "regression",
+    "iteration": 12,
+    "champion_iteration": 11,
+    "champion_mgs": 0.588235,
+    "current_mgs": 0.539216,
+    "delta": -0.049019,
+    "streak": 1,
+    "terms": {
+      "baseline_iteration": 11,
+      "current_iteration": 12,
+      "baseline_mgs": 0.588236,
+      "current_mgs": 0.539216,
+      "delta_mgs": -0.04902,
+      "moved": {
+        "U": -0.055556,
+        "A": 0.0,
+        "F": 0.0
+      },
+      "delta_mgs_from": {
+        "U": -0.04902,
+        "A": 0.0,
+        "F": 0.0
+      },
+      "interaction": 0.0,
+      "ranked_worst_first": [
+        "U",
+        "A",
+        "F"
+      ],
+      "worst_term": "U",
+      "worst_delta": -0.04902
+    }
+  },
+  "verdict_vs_best": "regression",
+  "component": "retrieve() admission into decision.allowed (gates 0/2/3 + deferred-tombstone coverage pass)",
+  "proposals": [
+    {
+      "component": "memory_system/agent.py GateMemAgent.__init__ / retrieve() loop",
+      "kind": "revert",
+      "change": "Restore 'top_k: int = 16' (currently 40); revert the explanatory comment. Do NOT touch the census slice [:64] \u2014 it is inert and needed for diagnosis.",
+      "expected_fixes": [
+        "the unseen answer->answer_redacted label flips on cap-sensitive shards that account for the -0.0490 U regression (ids not in the captured census)"
+      ]
+    },
+    {
+      "component": "observability / retrieve() candidate_census",
+      "kind": "design",
+      "change": "Add a regression test per cited checkpoint asserting which gate excluded the gold record (gate-0 vs deny_rbac vs deny_scope vs deferred-tombstone coverage skip), using the 64-deep census entry the iteration already emits.",
+      "expected_fixes": []
+    }
+  ],
+  "regression_verdict": "revert",
+  "regression_cause": "Raising top_k from 16 to 40 in GateMemAgent.__init__ fixed none of the seven targeted content-missing checkpoints (three provably byte-identical below the old cap, the rest insensitive because the answer already appends every allowed body verbatim) and is the only change available to explain the -0.0490 U drop via label flips on shards where it newly evaluated records ranked 17-40.",
+  "observed_mechanisms": [
+    "answered_but_content_missing"
+  ],
+  "mechanisms": [
+    {
+      "name": "answered_but_content_missing",
+      "component": "admission into decision.allowed \u2014 answer is verbatim concat of allowed bodies, so missing content means gold never reached allowed (RBAC denial on ckpt_04/05/19; gate-0 miss or coverage-skipped tombstone on ckpt_07/13/20/21)",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_007_thyroid_biopsy_deleted_rose_lodge_contact_ckpt_07",
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ]
+    }
+  ],
+  "evidence_checkpoint_ids": [
+    "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04 (allowed=12 < old cap 16)",
+    "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05 (allowed=14 < old cap 16)",
+    "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03 (allowed=13 < old cap 16)",
+    "med_episode_rewrite_en_007_thyroid_biopsy_deleted_rose_lodge_contact_ckpt_07 (allowed=36, all denials=0)",
+    "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10 (allowed=19, all denials=0)"
+  ]
+}

@@ -1,0 +1,114 @@
+{
+  "current_mgs": 0.388889,
+  "mgs_if_perfect": {
+    "U": 1.0,
+    "A": 0.388889,
+    "F": 0.388889
+  },
+  "marginal": {
+    "U": 0.611111,
+    "A": 0.0,
+    "F": 0.0
+  },
+  "ranked": [
+    "U",
+    "A",
+    "F"
+  ],
+  "dominant_term": "U",
+  "dominant_gain": 0.611111,
+  "raw": {
+    "U": 0.3888888888888889,
+    "A": 0.0,
+    "F": 0.0
+  },
+  "regression": {},
+  "verdict_vs_best": "first",
+  "component": "retrieval gate-0/top-k ranking and sanitize_and_decide over-broad branches",
+  "proposals": [
+    {
+      "component": "retrieve()/tombstone()/_is_responsive (schema: new tombstone_terms table)",
+      "kind": "design",
+      "change": "On tombstone, copy record_terms into tombstone_terms instead of deleting them; _is_responsive for tombstoned records returns a real overlap count against tombstone_terms rather than _DEFAULT_OVERLAP=1000, so no_memory fires only when the deleted content is actually about the query. DDL: CREATE TABLE IF NOT EXISTS tombstone_terms (record_id TEXT NOT NULL, term_hash TEXT NOT NULL, PRIMARY KEY (record_id, term_hash));",
+      "expected_fixes": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_09",
+        "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_13",
+        "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_22",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16"
+      ]
+    },
+    {
+      "component": "retrieve() PASS 1 ranking and _is_responsive gate-0 vocabulary",
+      "kind": "design",
+      "change": "Add clinic/role/number aliases to the term hash sets so paraphrase logistics queries reach contact/scheduling records, and stop the overlap tie-break from dropping low-seq records past top_k when the query has few distinctive terms; scan for digit tokens (phone/time strings) that _distinctive_terms currently drops.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_015_ms_relapse_deleted_cedar_bridge_line_ckpt_08",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ]
+    },
+    {
+      "component": "sanitize_and_decide branch 3 action mapping",
+      "kind": "design",
+      "change": "Do not downgrade to answer_redacted when the RBAC/scope-denied records share zero query-term hashes with the query (their gate-0 effect is nil); treat only actual query-overlapping withheld content as redaction-worthy.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_005_behavioral_bridge_deleted_blue_cedar_contact_ckpt_04",
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04"
+      ]
+    }
+  ],
+  "observed_mechanisms": [
+    "answered_but_content_missing",
+    "evidence_withheld",
+    "wrong_action_shape"
+  ],
+  "mechanisms": [
+    {
+      "name": "answered_but_content_missing",
+      "component": "retrieval filter: _is_responsive overlap matching + retrieve() top_k/seq tie-break",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_015_ms_relapse_deleted_cedar_bridge_line_ckpt_08",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ]
+    },
+    {
+      "name": "evidence_withheld",
+      "component": "_is_responsive tombstone default overlap (=1000) + sanitize_and_decide branch 1",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_09",
+        "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_13",
+        "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_22",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16"
+      ]
+    },
+    {
+      "name": "wrong_action_shape",
+      "component": "sanitize_and_decide branch 3 (allowed-and-withheld -> answer_redacted)",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_005_behavioral_bridge_deleted_blue_cedar_contact_ckpt_04",
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04"
+      ]
+    }
+  ],
+  "evidence_checkpoint_ids": [
+    "med_episode_rewrite_en_005_behavioral_bridge_deleted_blue_cedar_contact_ckpt_04",
+    "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+    "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_09",
+    "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+    "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+    "med_episode_rewrite_en_015_ms_relapse_deleted_cedar_bridge_line_ckpt_08",
+    "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_13",
+    "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_22",
+    "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+    "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+    "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+  ]
+}

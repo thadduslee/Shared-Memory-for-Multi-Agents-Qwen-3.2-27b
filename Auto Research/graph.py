@@ -7,18 +7,26 @@ TOPOLOGY
                                     |
                                     v
                          +---------------------+
-                         |      architect      |  proposes design + migration
-                         |  (no write, no sh)  |  + Developer work order
+                         |      architect      |  reads iter i's critique.md,
+                         |  (no write, no sh)  |  then critique_summary.md;
+                         |                     |  proposes design + migration
+                         |                     |  + Developer work order; then
+                         |                     |  appends iter i's summary to
+                         |                     |  critique_summary.md
                          +----------+----------+
                                     | route_after_architect
                                     v
                          +---------------------+
                          |      developer      |   <-- ONE self-driving agent
-                         |  calls its own      |       (nodes/developer.py)
-                         |  tools, reads its   |       real tool schema, one
-                         |  own output, loops  |       conversation, its own loop
-                         +----------+----------+
-                                    | route_after_developer
+             +---------->|  calls its own      |       (nodes/developer.py)
+             |           |  tools, reads its   |       real tool schema, one
+             |           |  own output, loops  |       conversation, its own loop
+             |           +----------+----------+
+             |                      | route_after_developer
+             | infrastructure       |
+             | +-----------+        |
+             +-+infra_retry|        |
+               +-----------+        |
                     exhausted       |          ok
               +---------------------+----------+
               |                                v
@@ -83,9 +91,20 @@ WHY THE TOPOLOGY LOOKS LIKE THIS
   loop rather than a second pair of nodes so that both stages provably run the
   same code; a duplicated "full_eval" subgraph could drift from the dev one and
   the gate would stop meaning anything.
-* Every failure edge points at `architect`, never at `developer`.  A build that
-  will not build and a batch that dies identically on every shard are both
-  evidence about the DESIGN, and only the Architect can change that.  Note that
+* Almost every failure edge points at `architect`, never at `developer`.  A
+  build that will not build and a batch that dies identically on every shard are
+  both evidence about the DESIGN, and only the Architect can change that.  The
+  ONE exception is `infra_retry`: an episode the Developer classified as an
+  INFRASTRUCTURE failure -- transport timeouts, empty replies, a turn ceiling
+  reached without a single gate tool ever running -- is not evidence about the
+  design at all, and sending it to the Architect asks for a redesign in answer
+  to a network outage.  run-8cf58d33b311 did exactly that: iteration 2 never
+  called `run_tests` or `sql_exec`, its report said "unmet mandatory gates:
+  tests_ok, migration_ok" anyway, and the redesign that answered it cost the run
+  0.095 MGS.  See `nodes/developer.py::classify_failure` for how the three
+  classifications are told apart, and note that only `infrastructure` retries:
+  an episode that read files for sixty turns and wrote nothing has a work-order
+  problem, and re-running the same work order would reproduce it.  Note that
   this is the edge for a build that failed AFTER the Developer had already
   looped on it: retrying the implementation is the Developer's own job and it
   has spent `MAX_DEV_RETRIES` doing exactly that before this edge is taken.  The
@@ -96,6 +115,14 @@ WHY THE TOPOLOGY LOOKS LIKE THIS
   the Architect learns from the iteration.
 * `finalize` exists so that `halt_reason` is populated on exactly one path into
   END, instead of each router having to remember to set it.
+* The loop's memory of its own history is a FILE the Architect keeps, not an
+  edge: `runs/critique_summary.md`.  The Critic writes one iteration's
+  `critique.md` and stops there; the Architect is the only node that reads a
+  critique and writes the design answering it in the same turn, so it is the one
+  that can summarise a critique without a second model call and without a second
+  reader to disagree about what the critique said.  It reads the notebook BEFORE
+  it designs and appends to it AFTER, so the history a turn designs from is
+  strictly the iterations before the critique in front of it.
 
 `MOCK_MODE` is not consulted anywhere in this file. Flipping it swaps clients
 behind the interfaces; the topology is byte-identical.
@@ -108,7 +135,10 @@ from typing import Any
 
 from langgraph.graph import END, START, StateGraph
 
+import config
 import routers
+import scoreboard
+from nodes._common import node_span
 from nodes.architect import architect_node
 from nodes.critic import critic_node
 from nodes.developer import developer_node
@@ -119,7 +149,6 @@ from nodes.medical_evaluator import (
     eval_worker_node,
     fan_out_evaluator,
 )
-from nodes._common import node_span
 from state import OrchestratorState
 
 log = logging.getLogger("orchestrator.graph")
@@ -142,21 +171,109 @@ async def scale_up_node(state: OrchestratorState) -> dict[str, Any]:
     }
 
 
+async def infra_retry_node(state: OrchestratorState) -> dict[str, Any]:
+    """Charge one infrastructure retry and send the SAME iteration back to build.
+
+    A node rather than a bare `developer -> developer` self-edge for the reason
+    `scale_up_node` is a node: routers stay pure so the routing tests can call
+    them, and `infra_retry_count` gets exactly one writer.
+
+    `dev_failure_report` is cleared on the way through. It is the Architect's
+    only feedback channel for a failed build, and leaving a report behind that
+    describes an OpenRouter outage would make the NEXT Architect turn -- after a
+    retry that succeeded -- redesign against a failure that has already been
+    recovered from.
+    """
+    iteration = int(state.get("iteration_count", 0))
+    attempt = int(state.get("infra_retry_count", 0)) + 1
+    async with node_span(
+        "infra_retry", iteration, str(state.get("current_curriculum_phase") or "")
+    ) as span:
+        report = state.get("dev_failure_report") or {}
+        span["attempt"] = attempt
+        span["classification_reason"] = report.get("classification_reason") or ""
+        log.warning(
+            "infrastructure retry %d/%d for iteration %d: %s",
+            attempt, config.MAX_INFRA_RETRIES, iteration,
+            report.get("classification_reason") or "unclassified",
+        )
+        return {
+            "infra_retry_count": attempt,
+            "dev_failure_report": {},
+            "halt_reason": None,
+            "node_timings": [span],
+        }
+
+
+async def architect_retry_node(state: OrchestratorState) -> dict[str, Any]:
+    """Charge one Architect retry and send the SAME iteration back to design.
+
+    A node rather than a bare self-edge for the reason `infra_retry_node` is
+    one: routers stay pure so the routing tests can call them, and
+    `architect_retry_count` gets exactly one writer.
+
+    `halt_reason` is cleared on the way through -- it is the flag the router
+    keyed on, and leaving it set would make the retried Architect's own
+    `route_after_architect` see a failure that has already been recovered from.
+
+    NOTE the counter is NOT reset by `architect_node` the way `infra_retry_count`
+    is: the Architect resets that one at the top of its own turn, so an Architect
+    retry sharing it would clear its own budget on every attempt and loop until
+    the wall clock. This counter is reset by the Developer instead, once an
+    iteration has actually got as far as being built.
+    """
+    iteration = int(state.get("iteration_count", 0)) + 1
+    attempt = int(state.get("architect_retry_count", 0)) + 1
+    async with node_span(
+        "architect_retry", iteration, str(state.get("current_curriculum_phase") or "")
+    ) as span:
+        span["attempt"] = attempt
+        span["failure"] = str(state.get("halt_reason") or "")[:200]
+        log.warning(
+            "architect retry %d/%d for iteration %d: %s",
+            attempt, config.MAX_INFRA_RETRIES, iteration,
+            str(state.get("halt_reason") or "")[:200],
+        )
+        return {
+            "architect_retry_count": attempt,
+            "halt_reason": None,
+            "node_timings": [span],
+        }
+
+
 async def finalize_node(state: OrchestratorState) -> dict[str, Any]:
     """The single exit. Populates `halt_reason` and advances the curriculum."""
     iteration = int(state.get("iteration_count", 0))
     async with node_span("finalize", iteration, str(state.get("current_curriculum_phase") or "")) as span:
         reason = routers.halt_reason_for(state)
         next_phase, complete = routers.advance_curriculum(state)
+        board = scoreboard.summary(state)
         span["halt_reason"] = reason
+        span["best_mgs"] = board["best_mgs"]
+        span["best_iteration"] = board["best_iteration"]
         log.info(
-            "RUN COMPLETE | %s | MGS=%.4f U=%.4f A=%.4f F=%.4f | iterations=%d | "
+            "RUN COMPLETE | %s | final MGS=%.4f U=%.4f A=%.4f F=%.4f | iterations=%d | "
             "curriculum: %s%s",
             reason, float(state.get("mgs_score", 0.0)), float(state.get("utility_score", 0.0)),
             float(state.get("access_violation_rate", 1.0)),
             float(state.get("forgetting_failure_rate", 1.0)), iteration,
             next_phase, " (complete)" if complete else "",
         )
+        # The trend, printed once at the end, at WARNING when the run finished
+        # below its own best. A run that walked away from its high water mark
+        # should not be able to end on an INFO line that looks like every other
+        # INFO line.
+        if board["regressed_from_best"]:
+            log.warning(
+                "RUN REGRESSED: best MGS=%.4f at iteration %d, but the run ended at "
+                "%.4f (iteration %d). The final workspace is NOT the best one -- "
+                "see the `best_iteration` field in the run summary.",
+                board["best_mgs"], board["best_iteration"],
+                board["final_mgs"], board["final_iteration"],
+            )
+        elif board["best_iteration"]:
+            log.info("RUN BEST: MGS=%.4f at iteration %d",
+                     board["best_mgs"], board["best_iteration"])
         return {
             "halt_reason": reason,
             "current_curriculum_phase": next_phase,
@@ -195,20 +312,37 @@ def build_graph(checkpointer: Any | None = None):
     builder.add_node("scale_up", scale_up_node)
     builder.add_node("critic", critic_node)
     builder.add_node("curriculum", curriculum_node)
+    builder.add_node("infra_retry", infra_retry_node)
+    builder.add_node("architect_retry", architect_retry_node)
     builder.add_node("finalize", finalize_node)
 
     builder.add_edge(START, "architect")
 
     builder.add_conditional_edges(
         "architect", routers.route_after_architect,
-        {"developer": "developer", "halt": "finalize"},
+        {
+            "developer": "developer",
+            "retry_architect": "architect_retry",
+            "halt": "finalize",
+        },
     )
+    builder.add_edge("architect_retry", "architect")
 
-    # A Developer that cannot build the design sends the design back, not forward.
+    # A Developer that cannot build the design sends the design back, not
+    # forward -- unless the episode died of INFRASTRUCTURE, in which case it
+    # goes back to the Developer through `infra_retry`, which is a node rather
+    # than a bare self-edge so that `infra_retry_count` has exactly one writer
+    # and the retry is visible in `node_timings`.
     builder.add_conditional_edges(
         "developer", routers.route_after_developer,
-        {"evaluate": "eval_dispatch", "architect": "curriculum", "halt": "finalize"},
+        {
+            "evaluate": "eval_dispatch",
+            "retry_developer": "infra_retry",
+            "architect": "curriculum",
+            "halt": "finalize",
+        },
     )
+    builder.add_edge("infra_retry", "developer")
 
     # THE FAN-OUT. A conditional edge is the only place `Send` is meaningful.
     builder.add_conditional_edges(

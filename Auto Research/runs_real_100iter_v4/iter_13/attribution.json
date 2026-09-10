@@ -1,0 +1,114 @@
+{
+  "current_mgs": 0.588235,
+  "mgs_if_perfect": {
+    "U": 0.882353,
+    "A": 0.666667,
+    "F": 0.588235
+  },
+  "marginal": {
+    "U": 0.294118,
+    "A": 0.078431,
+    "F": 0.0
+  },
+  "ranked": [
+    "U",
+    "A",
+    "F"
+  ],
+  "dominant_term": "U",
+  "dominant_gain": 0.294118,
+  "raw": {
+    "U": 0.6666666666666666,
+    "A": 0.11764705882352941,
+    "F": 0.0
+  },
+  "regression": {
+    "verdict": "tied",
+    "iteration": 13,
+    "champion_iteration": 11,
+    "champion_mgs": 0.588235,
+    "current_mgs": 0.588235,
+    "delta": 0.0,
+    "streak": 2,
+    "terms": {
+      "baseline_iteration": 11,
+      "current_iteration": 13,
+      "baseline_mgs": 0.588236,
+      "current_mgs": 0.588236,
+      "delta_mgs": 0.0,
+      "moved": {
+        "U": 0.0,
+        "A": 0.0,
+        "F": 0.0
+      },
+      "delta_mgs_from": {
+        "U": 0.0,
+        "A": 0.0,
+        "F": 0.0
+      },
+      "interaction": 0.0,
+      "ranked_worst_first": [
+        "U",
+        "A",
+        "F"
+      ],
+      "worst_term": "U",
+      "worst_delta": 0.0
+    }
+  },
+  "verdict_vs_best": "tied",
+  "component": "retrieval admission into decision.allowed (specific excluding gate unidentified pending per-candidate status)",
+  "proposals": [
+    {
+      "component": "store.py::retrieve candidate_census / agent.py::query debug projection",
+      "kind": "design",
+      "change": "Carry the per-candidate status attribution (allowed|deny_rbac|deny_scope|deny_tombstone|gate0_skip|unscanned) into the adopted champion (the iterate that added it tied and will not be adopted), and run the six checkpoints dumping each gold record's status. Fix only the gate the run names.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ]
+    },
+    {
+      "component": "DEFAULT_ROLE_GRANTS / relationships geometry (store.py)",
+      "kind": "design",
+      "change": "If P0 reports deny_rbac on the gold record for ckpt_04/05/19 (the only census checkpoints with denied_rbac>0 on authorized queries), audit the role x sensitivity grant / relationship coverage for those askers; do not ship before the P0 result.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16"
+      ]
+    }
+  ],
+  "regression_verdict": "not_the_cause",
+  "regression_cause": "The top_k default revert 40->16 in GateMemAgent.__init__ is exonerated: it restored the iteration-11 champion metric exactly (0.5392 -> 0.5882) and the plateau is the six deleted-episode content-missing failures that no cap value has moved across iterations 9/11/12/13.",
+  "observed_mechanisms": [
+    "answered_but_content_missing"
+  ],
+  "mechanisms": [
+    {
+      "name": "answered_but_content_missing",
+      "component": "retrieve() gate-0/RBAC/scope admission of the gold record (store.py); the answer path is exonerated because it emits every allowed body verbatim",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ]
+    }
+  ],
+  "evidence_checkpoint_ids": [
+    "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+    "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+    "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+    "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+    "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+    "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+  ]
+}

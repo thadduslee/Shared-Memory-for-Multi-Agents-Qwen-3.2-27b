@@ -1,0 +1,111 @@
+{
+  "current_mgs": 0.588235,
+  "mgs_if_perfect": {
+    "U": 0.882353,
+    "A": 0.666667,
+    "F": 0.588235
+  },
+  "marginal": {
+    "U": 0.294118,
+    "A": 0.078431,
+    "F": 0.0
+  },
+  "ranked": [
+    "U",
+    "A",
+    "F"
+  ],
+  "dominant_term": "U",
+  "dominant_gain": 0.294118,
+  "raw": {
+    "U": 0.6666666666666666,
+    "A": 0.11764705882352941,
+    "F": 0.0
+  },
+  "regression": {
+    "verdict": "tied",
+    "iteration": 19,
+    "champion_iteration": 11,
+    "champion_mgs": 0.588235,
+    "current_mgs": 0.588235,
+    "delta": 0.0,
+    "streak": 7,
+    "terms": {
+      "baseline_iteration": 11,
+      "current_iteration": 19,
+      "baseline_mgs": 0.588236,
+      "current_mgs": 0.588236,
+      "delta_mgs": 0.0,
+      "moved": {
+        "U": 0.0,
+        "A": 0.0,
+        "F": 0.0
+      },
+      "delta_mgs_from": {
+        "U": 0.0,
+        "A": 0.0,
+        "F": 0.0
+      },
+      "interaction": 0.0,
+      "ranked_worst_first": [
+        "U",
+        "A",
+        "F"
+      ],
+      "worst_term": "U",
+      "worst_delta": 0.0
+    }
+  },
+  "verdict_vs_best": "tied",
+  "component": "availability of the six gold logistics records in the as_of retrieval surface (post-horizon or deleted-before-as_of)",
+  "proposals": [
+    {
+      "component": "store._honor_deletion_request",
+      "kind": "revert_abandon",
+      "change": "Do not adopt the logistics guard (the 'spare = q_is_contact and overlap_loc_only and not shares_phone_digest and not r_is_phone_line' block); its premise \u2014 over-match tombstoning the six golds \u2014 is excluded by denied_tombstone=0 and absence of no_memory on every failing checkpoint.",
+      "expected_fixes": []
+    },
+    {
+      "component": "deletion_request_audit table + patient_census join",
+      "kind": "measurement",
+      "change": "Adopt only the non-behavioral audit table and run the per-checkpoint fate classification (post_horizon / tombstoned_legitimately / live_not_retrieved) for the six golds on the champion before any further store change.",
+      "expected_fixes": []
+    },
+    {
+      "component": "role_grants / relationships coverage",
+      "kind": "design",
+      "change": "Post-mortem the three denied_rbac record_ids behind 010's answer_redacted; only fix the grant/relationship if those records are within-authorization for the asker.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04"
+      ]
+    }
+  ],
+  "regression_verdict": "not_the_cause",
+  "regression_cause": "The deletion-scope guard in _honor_deletion_request did not cause a loss because this run TIED at 0.5882, and its target mechanism (over-match tombstoning the six golds) is refuted by the run's own counters: all six failing checkpoints show denied_tombstone=0, no no_memory action, and gold absent from a fully-appended decision.allowed.",
+  "observed_mechanisms": [
+    "answered_but_content_missing"
+  ],
+  "mechanisms": [
+    {
+      "name": "answered_but_content_missing",
+      "component": "as_of record availability \u2014 gold is not in any live-cleared record (verbatim append covers all of decision.allowed) and no responsive tombstone exists (denied_tombstone=0, no no_memory on any of the six)",
+      "kind": "infrastructure",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ]
+    }
+  ],
+  "evidence_checkpoint_ids": [
+    "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+    "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+    "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+    "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+    "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+    "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+  ]
+}

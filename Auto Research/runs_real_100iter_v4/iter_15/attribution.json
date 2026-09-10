@@ -1,0 +1,110 @@
+{
+  "current_mgs": 0.588235,
+  "mgs_if_perfect": {
+    "U": 0.882353,
+    "A": 0.666667,
+    "F": 0.588235
+  },
+  "marginal": {
+    "U": 0.294118,
+    "A": 0.078431,
+    "F": 0.0
+  },
+  "ranked": [
+    "U",
+    "A",
+    "F"
+  ],
+  "dominant_term": "U",
+  "dominant_gain": 0.294118,
+  "raw": {
+    "U": 0.6666666666666666,
+    "A": 0.11764705882352941,
+    "F": 0.0
+  },
+  "regression": {
+    "verdict": "tied",
+    "iteration": 15,
+    "champion_iteration": 11,
+    "champion_mgs": 0.588235,
+    "current_mgs": 0.588235,
+    "delta": 0.0,
+    "streak": 3,
+    "terms": {
+      "baseline_iteration": 11,
+      "current_iteration": 15,
+      "baseline_mgs": 0.588236,
+      "current_mgs": 0.588236,
+      "delta_mgs": 0.0,
+      "moved": {
+        "U": 0.0,
+        "A": 0.0,
+        "F": 0.0
+      },
+      "delta_mgs_from": {
+        "U": 0.0,
+        "A": 0.0,
+        "F": 0.0
+      },
+      "interaction": 0.0,
+      "ranked_worst_first": [
+        "U",
+        "A",
+        "F"
+      ],
+      "worst_term": "U",
+      "worst_delta": 0.0
+    }
+  },
+  "verdict_vs_best": "tied",
+  "component": "answer assembly / retrieval recall (rescue not invoked on LLM path)",
+  "proposals": [
+    {
+      "component": "agent.query \u2013 LLM answer path",
+      "kind": "design",
+      "change": "Move the rescue_missing_logistics call so it runs after the LLM answer and the Details: join, regardless of whether self.llm is set. Currently it only executes in the self.llm is None branch, which is not the path used by the evaluation harness.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03",
+        "possibly 011 and 019"
+      ]
+    },
+    {
+      "component": "DEFAULT_ROLE_GRANTS / sensitivity classifier",
+      "kind": "design",
+      "change": "Add a run diagnostic that logs deny_rbac snippets for the checkpoints with denied_rbac>0; if those denials are answer-bearing, expand the relevant role grants (do not touch confidential classification if that would leak). This addresses the label flip on checkpoint 010.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04"
+      ]
+    }
+  ],
+  "regression_verdict": "not_the_cause",
+  "regression_cause": "The rescue_missing_logistics mechanism was added only to the no-LLM branch of agent.query, so it never executed under the LLM-based evaluation harness; the six content-missing failures persisted unchanged, producing a tie rather than a gain.",
+  "observed_mechanisms": [
+    "answered_but_content_missing"
+  ],
+  "mechanisms": [
+    {
+      "name": "answered_but_content_missing",
+      "component": "answer assembly / retrieval recall",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ]
+    }
+  ],
+  "evidence_checkpoint_ids": [
+    "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+    "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+    "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+    "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+    "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+    "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+  ]
+}

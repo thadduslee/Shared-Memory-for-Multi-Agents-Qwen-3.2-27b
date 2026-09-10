@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Any
 
 import config
+import scoreboard
 from gatemem_adapter import (
     LEGACY_METRIC_KEYS,
     memory_governance_score,
@@ -336,6 +337,51 @@ async def judge_node(state: OrchestratorState) -> dict[str, Any]:
             "dev_gate_mgs": config.DEV_GATE_MGS, "mgs_target": config.MGS_TARGET,
             "proceed_to_full": proceed,
         })
+        # THE SCOREBOARD ROW. Appended before the artifacts are written so the
+        # `judge_report.json` on disk and the row in state describe the same
+        # measurement, and so that everything downstream -- the champion the
+        # next Developer inherits, the trend the Architect reads, the Critic's
+        # regression verdict, the halt reason -- derives from one record rather
+        # than from four scalars that the next iteration overwrites.
+        row = scoreboard.score_row(
+            iteration=iteration, stage=stage, phase=phase,
+            utility=float(report["U"]), access=float(report["A"]),
+            forgetting=float(report["F"]), mgs=mgs,
+            n_checkpoints=int(report.get("n_scored") or 0),
+            workspace=str(state.get("memory_codebase") or ""),
+            # Carried onto the row so the champion logic can refuse to compare a
+            # score measured without the answerer against one measured with it.
+            degraded=bool(state.get("render_degraded")),
+        )
+        # The verdict is computed against the history INCLUDING this row, which
+        # is not yet in state -- LangGraph applies the reducer after the node
+        # returns -- so the comparison is made on a local concatenation.
+        history = list(state.get("score_history") or []) + [row]
+        verdict = scoreboard.verdict_for(history, iteration, stage)
+        best_mgs, best_iteration = scoreboard.best_of(history, stage)
+        report.update({
+            "verdict_vs_best": verdict,
+            "best_mgs_so_far": round(best_mgs, 6),
+            "best_iteration_so_far": best_iteration,
+            # THE HEALTH OF THE MEASUREMENT, in the file that reports it. A
+            # judge_report with no note about the answerer reads as an ordinary
+            # score even when every answer in it was written by the retrieval
+            # layer, which is how run-c993a6e93050 produced 23 clean-looking
+            # reports with the vLLM evaluator down.
+            "render_degraded": bool(state.get("render_degraded")),
+            "render_degraded_rate": float(state.get("render_degraded_rate", 0.0)),
+            "n_render_degraded": int(state.get("n_render_degraded", 0)),
+        })
+        if state.get("render_degraded"):
+            log.error(
+                "judge iter=%d stage=%s: THESE NUMBERS ARE NOT COMPARABLE. %d "
+                "answering checkpoint(s) (%.0f%%) were answered by the retrieval "
+                "layer rather than by the evaluator model, so U/A/F/MGS here "
+                "describe the gating layer with raw evidence pasted in.",
+                iteration, stage, int(state.get("n_render_degraded", 0)),
+                float(state.get("render_degraded_rate", 0.0)) * 100,
+            )
+
         write_artifact(config.stage_dir(iteration, stage) / "judge_report.json", report)
         write_artifact(config.iteration_dir(iteration) / "judge_report.json", report)
 
@@ -346,11 +392,35 @@ async def judge_node(state: OrchestratorState) -> dict[str, Any]:
             config.DEV_GATE_MGS, "PROCEED" if proceed else "SKIP FULL",
             config.MGS_TARGET, malformed, len(missing),
         )
+        # The comparison, on its own line and at WARNING when it is bad news.
+        # A regression used to be invisible in the log: every iteration printed
+        # its own four numbers and nothing ever printed the difference, so a run
+        # collapsing from 0.3172 to 0.1190 read as five ordinary iterations.
+        if verdict == scoreboard.VERDICT_REGRESSION:
+            log.warning(
+                "judge iter=%d stage=%s: REGRESSION -- MGS=%.4f is BELOW the best "
+                "(iteration %d, MGS=%.4f, delta %+.4f)",
+                iteration, stage, mgs, best_iteration, best_mgs, mgs - best_mgs,
+            )
+        elif verdict == scoreboard.VERDICT_TIED:
+            log.warning(
+                "judge iter=%d stage=%s: TIED with the best (iteration %d, MGS=%.4f); "
+                "this iteration's code will not be adopted",
+                iteration, stage, best_iteration, best_mgs,
+            )
+        elif verdict == scoreboard.VERDICT_IMPROVED:
+            log.info("judge iter=%d stage=%s: NEW BEST (was %.4f)",
+                     iteration, stage, max((float(r.get("MGS") or 0.0)
+                                            for r in scoreboard.rows_for_stage(history, stage)
+                                            if int(r.get("iteration") or 0) < iteration),
+                                           default=0.0))
         span["tokens"] = usage_delta(*usages)["total_tokens"]
         span["mgs"] = mgs
+        span["verdict_vs_best"] = verdict
 
         return {
             "judge_report": report,
+            "score_history": [row],
             "mgs_score": mgs,
             "utility_score": float(report["U"]),
             "access_violation_rate": float(report["A"]),

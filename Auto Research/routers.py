@@ -18,6 +18,7 @@ import logging
 from typing import Any
 
 import config
+import scoreboard
 from nodes._common import budget_snapshot
 
 log = logging.getLogger("orchestrator.router")
@@ -62,17 +63,59 @@ def route_after_developer(state: dict[str, Any]) -> str:
     A Developer that exhausted its retries is evidence about the *design*, so
     the feedback goes back to the Architect rather than forward to the
     Evaluator.
+
+    ...UNLESS THE BUILD DIED OF INFRASTRUCTURE, which is not evidence about the
+    design at all. run-8cf58d33b311 iteration 2 spent its whole episode on
+    OpenRouter timeouts -- eight minutes of `http transport exceeded 150s`,
+    empty replies, the 60-turn ceiling -- and never once called `run_tests` or
+    `sql_exec`. The report it produced said "unmet mandatory gates: tests_ok,
+    migration_ok", the Architect read that as a design critique, and the
+    redesign it wrote in response ("remove the top_k stop") is the change that
+    cost the run 0.095 MGS in the next iteration. Gates that were never RUN are
+    not gates that FAILED, and the fix for a flapping endpoint is to run the
+    same iteration again, not to change the schema.
     """
     if budget_exhausted(state):
         return "halt"
     if state.get("halt_reason"):
-        log.warning("developer -> architect: %s", state["halt_reason"])
         # Even a failed build must respect MAX_ITERATIONS, or a design the
         # Developer can never build spins the loop forever.
         if int(state.get("iteration_count", 0)) >= config.MAX_ITERATIONS:
+            log.warning("developer -> halt: %s", state["halt_reason"])
             return "halt"
+        if _retryable_infrastructure_failure(state):
+            report = state.get("dev_failure_report") or {}
+            log.warning(
+                "developer -> developer: episode %d/%d died of INFRASTRUCTURE "
+                "(%s), not of the design -- re-running the SAME iteration rather "
+                "than redesigning. %s",
+                int(state.get("infra_retry_count", 0)) + 1, config.MAX_INFRA_RETRIES,
+                report.get("classification_reason") or "unclassified",
+                state["halt_reason"],
+            )
+            return "retry_developer"
+        log.warning("developer -> architect: %s", state["halt_reason"])
         return "architect"
     return "evaluate"
+
+
+def _retryable_infrastructure_failure(state: dict[str, Any]) -> bool:
+    """Is this failed build worth re-running unchanged?
+
+    Only when the Developer itself classified the episode as `infrastructure`
+    (see `nodes/developer.py::classify_failure`) and the per-iteration retry
+    budget is not spent. `inconclusive` deliberately does NOT qualify: an
+    episode that read files for sixty turns and wrote nothing has a work-order
+    problem, and re-running the same work order would reproduce it.
+    """
+    if config.MAX_INFRA_RETRIES <= 0:
+        return False
+    report = state.get("dev_failure_report") or {}
+    if not isinstance(report, dict) or not report:
+        return False
+    if str(report.get("classification") or "") != "infrastructure":
+        return False
+    return int(state.get("infra_retry_count", 0)) < config.MAX_INFRA_RETRIES
 
 
 # ======================================================================
@@ -109,6 +152,28 @@ def route_after_collect(state: dict[str, Any]) -> str:
         if int(state.get("iteration_count", 0)) >= config.MAX_ITERATIONS:
             return "halt"
         return "architect"
+
+    # (c) The answerer was not answering. Predictions exist and will score, but
+    #     they were written by the retrieval layer rather than by a model, so
+    #     the numbers describe a different system.
+    #
+    #     THIS IS A HALT, NOT A RETRY. A dead endpoint does not fix itself, and
+    #     run-c993a6e93050 proved what the alternative costs: 23 iterations, 3
+    #     hours and 12.5 million tokens of designing, rolling back and
+    #     critiquing against numbers produced with the vLLM evaluator down the
+    #     whole time. The loop cannot tell -- every mechanism downstream of here
+    #     works perfectly on the fiction it is handed -- so the check belongs
+    #     here, before the Judge turns it into a score.
+    if state.get("render_degraded") and config.HALT_ON_DEGRADED_EVAL:
+        log.error(
+            "EVALUATOR DEGRADED: %d of the answering checkpoints (%.0f%%) fell back "
+            "to raw evidence because the answerer did not respond. Halting rather "
+            "than scoring them: these numbers would measure the gating layer, not "
+            "the system. Check the evaluator endpoint and re-run.",
+            int(state.get("n_render_degraded", 0)),
+            float(state.get("render_degraded_rate", 0.0)) * 100,
+        )
+        return "halt"
 
     return "judge"
 
@@ -195,7 +260,12 @@ def route_after_critic(state: dict[str, Any]) -> str:
                  mgs, config.MGS_TARGET, iteration)
         return "halt"
     if iteration >= config.MAX_ITERATIONS:
-        log.info("iteration budget reached (%d); best MGS=%.4f", config.MAX_ITERATIONS, mgs)
+        # The BEST, out of the score history -- not `mgs`, which is the LAST.
+        # The two are the same only on a run that never regressed, and this line
+        # claimed "best MGS=0.1190" on a run whose best was 0.3172.
+        best_mgs, best_iteration = scoreboard.best_of(state)
+        log.info("iteration budget reached (%d); best MGS=%.4f (iteration %d), final MGS=%.4f",
+                 config.MAX_ITERATIONS, best_mgs, best_iteration, mgs)
         return "halt"
 
     log.info("MGS=%.4f < %.2f: iterating (%d/%d)", mgs, config.MGS_TARGET, iteration, config.MAX_ITERATIONS)
@@ -207,9 +277,63 @@ def route_after_critic(state: dict[str, Any]) -> str:
 # ======================================================================
 
 
+#: Substrings that mark an Architect failure as TRANSPORT rather than as a
+#: design the model could not produce. Matched against `halt_reason`, which is
+#: where `architect_node` puts the provider's error verbatim.
+_TRANSIENT_ARCHITECT_MARKERS = (
+    "timed out", "timeout", "connecterror", "connection", "empty response",
+    "in_flight", "in-flight", "http 402", "http 408", "http 429",
+    "http 500", "http 502", "http 503", "http 504",
+)
+
+
+def _architect_failure_is_transient(state: dict[str, Any]) -> bool:
+    """Did the Architect fail to answer, or fail to be reachable?
+
+    Only the second is worth retrying, and only a bounded number of times.
+    """
+    reason = str(state.get("halt_reason") or "").lower()
+    if "architect invocation failed" not in reason and "architect failed" not in reason:
+        return False
+    return any(marker in reason for marker in _TRANSIENT_ARCHITECT_MARKERS)
+
+
 def route_after_architect(state: dict[str, Any]) -> str:
-    """The Architect only fails fatally; there is nothing to build without it."""
-    if state.get("halt_reason") or budget_exhausted(state):
+    """Is there a design to build, and if not, is that the model's fault?
+
+    THE ARCHITECT FAILING IS FATAL TO THE ITERATION -- there is nothing for the
+    Developer to build without a design, and letting it invent its own spec is
+    worse than stopping. But "fatal to the iteration" was implemented as "fatal
+    to the RUN", for every cause including a two-minute rate limit.
+
+    run-c993a6e93050 ended on its 23rd iteration, after 3 hours and 12.5 million
+    tokens, on a single HTTP 402 whose own body read:
+
+        "This request would exceed your available credits given your current
+         in-flight requests. Retry after in-flight requests settle, or add
+         credits."   ... "Retry-After": "120"
+
+    The provider said when to come back. Nothing asked. `llm/client.py` now
+    treats that 402 as retryable and honours the stated wait, and this edge is
+    the second line of defence for everything that still gets through: a
+    transport failure sends the SAME iteration back to the Architect, bounded by
+    `MAX_INFRA_RETRIES`, instead of ending the run.
+    """
+    if budget_exhausted(state):
+        return "halt"
+    if state.get("halt_reason"):
+        if (
+            _architect_failure_is_transient(state)
+            and int(state.get("architect_retry_count", 0)) < config.MAX_INFRA_RETRIES
+        ):
+            log.warning(
+                "architect -> architect: attempt %d/%d, the failure was TRANSPORT "
+                "not design -- retrying the same iteration rather than ending the "
+                "run. %s",
+                int(state.get("architect_retry_count", 0)) + 1, config.MAX_INFRA_RETRIES,
+                str(state["halt_reason"])[:200],
+            )
+            return "retry_architect"
         return "halt"
     return "developer"
 
@@ -242,15 +366,38 @@ def advance_curriculum(state: dict[str, Any]) -> tuple[str, bool]:
 
 
 def halt_reason_for(state: dict[str, Any]) -> str:
-    """The human-readable reason a run stopped, for `halt_reason` at END."""
+    """The human-readable reason a run stopped, for `halt_reason` at END.
+
+    "best MGS" MEANS THE BEST MGS. It used to be formatted from
+    `state["mgs_score"]`, which is the LAST score, so run-8cf58d33b311 -- whose
+    scores were 0.3172, 0.2222, 0.1830, 0.1190 -- signed off with
+    `iteration budget exhausted after 5; best MGS=0.1190`. That is not a
+    rounding difference or a cosmetic slip: it is the run's headline number
+    reporting its worst result as its best, on exactly the runs where the
+    distinction matters most.
+    """
     if state.get("halt_reason"):
         return str(state["halt_reason"])
     budget = budget_exhausted(state)
     if budget:
         return budget
+    if state.get("render_degraded") and config.HALT_ON_DEGRADED_EVAL:
+        return (
+            f"evaluator degraded: {int(state.get('n_render_degraded', 0))} answering "
+            f"checkpoint(s) ({float(state.get('render_degraded_rate', 0.0)) * 100:.0f}%) "
+            "fell back to raw evidence because the answerer did not respond; the "
+            "scores would not describe the system under test"
+        )
     mgs = float(state.get("mgs_score", 0.0))
     if mgs >= config.MGS_TARGET:
         return f"target reached: MGS={mgs:.4f} >= {config.MGS_TARGET}"
     if int(state.get("iteration_count", 0)) >= config.MAX_ITERATIONS:
-        return f"iteration budget exhausted after {config.MAX_ITERATIONS}; best MGS={mgs:.4f}"
+        best_mgs, best_iteration = scoreboard.best_of(state)
+        tail = (
+            f"; best MGS={best_mgs:.4f} (iteration {best_iteration})"
+            if best_iteration else f"; best MGS={best_mgs:.4f}"
+        )
+        if best_iteration and abs(best_mgs - mgs) > 1e-9:
+            tail += f", final MGS={mgs:.4f}"
+        return f"iteration budget exhausted after {config.MAX_ITERATIONS}{tail}"
     return "completed"

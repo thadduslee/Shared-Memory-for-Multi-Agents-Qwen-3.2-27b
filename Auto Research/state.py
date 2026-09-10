@@ -83,12 +83,38 @@ class OrchestratorState(TypedDict, total=False):
     sql_schema: str                 # current SQL DDL for the memory store
     migration_sql: str              # ALTER TABLE / CREATE INDEX statements for this iteration
     dev_instructions: str           # Architect -> Developer ordered work order
+    # THE LOOP'S MEMORY OF ITS OWN EARLIER ITERATIONS.
+    #
+    # One capped entry per earlier iteration -- `{iteration, kind, summary}` --
+    # written by the Architect that read that iteration's critique. `critique`
+    # below only ever holds the LAST one, so before this existed iteration 4 had
+    # no record at all of what iterations 1 and 2 had already diagnosed and
+    # tried.
+    #
+    # THE ARTIFACT IS `runs/critique_summary.md` -- the Architect's notebook,
+    # which it appends these same rows to at the END of its turn, after the
+    # design is written. This list is the structured mirror of that file: it is
+    # what the once-per-iteration dedupe reads, and it is what the notebook is
+    # rebuilt from if RUNS_DIR was wiped or repointed between turns.
+    #
+    # `operator.add` because it is append-only across the run and, like
+    # `dev_failure_history`, is never reset between iterations -- resetting it
+    # would throw away the only thing it is for. Entries are capped at
+    # config.ARCHITECT_CRITIQUE_RECAP_MAX_TOKENS each; see nodes/_recap.py.
+    critique_digest: Annotated[list[dict[str, Any]], operator.add]
 
     # ---------------- Developer writes ----------------
     memory_codebase: str            # path to the workspace holding the current implementation
     codebase_delta: str             # unified diff of what the Developer changed this iteration
     dev_set_pass_rate: float        # local unit-test pass rate from the Developer's own suite
     dev_retries_used: int
+    # Turns the last Developer episode spent, and the ceiling it spent them
+    # against. Surfaced to the Architect because work-order SIZE is the lever it
+    # controls and turn exhaustion is the failure that lever causes: an episode
+    # that runs out of turns before calling its gate tools is scored as a failed
+    # build and every edit it made is discarded.
+    dev_turns_used: int
+    dev_turn_ceiling: int
     dev_files_changed: list[str]    # source files this episode actually changed (not inherited)
     # WHY THE DEVELOPER REPORTS ITS FAILURE IN DETAIL, not just a signature.
     #
@@ -107,6 +133,16 @@ class OrchestratorState(TypedDict, total=False):
     # last redesign did not address the thing that actually broke, and the
     # Architect needs to be told that rather than left to rediscover it.
     dev_failure_history: Annotated[list[dict[str, Any]], operator.add]
+    # How many times the CURRENT iteration has been re-run because its Developer
+    # episode died of infrastructure rather than of the design. Reset to 0 by
+    # the Architect at the top of every iteration; bounded by
+    # config.MAX_INFRA_RETRIES. See routers.route_after_developer.
+    infra_retry_count: int
+    # How many times the CURRENT iteration's ARCHITECT call has been retried
+    # after a transport failure. Separate from `infra_retry_count` because the
+    # Architect resets that one at the top of its own turn -- sharing a counter
+    # would let an Architect retry clear its own budget and loop forever.
+    architect_retry_count: int
 
     # ---------------- Medical Evaluator writes ----------------
     # `eval_results` is the fan-in accumulator: one entry per Send shard.
@@ -122,6 +158,19 @@ class OrchestratorState(TypedDict, total=False):
     predictions_path: str           # written by the collector after concatenating shards
     n_checkpoints_evaluated: int
     n_worker_failures: int
+    # WHETHER THE ANSWERER WAS ACTUALLY ANSWERING.
+    #
+    # A render call that fails falls back to the gated record bodies, which is
+    # right for one checkpoint and, unflagged, catastrophic for a whole run:
+    # every downstream number then describes the gating layer with raw evidence
+    # pasted in rather than the system under test. run-c993a6e93050 spent 23
+    # iterations and 12.5M tokens in exactly that state -- 0 of 357 answering
+    # predictions written by a model -- and reported `best MGS=0.8366` with no
+    # caveat. Written by the collector; read by the Judge, the scoreboard and
+    # `routers.route_after_collect`.
+    render_degraded: bool
+    render_degraded_rate: float
+    n_render_degraded: int
 
     # ---------------- Judge writes ----------------
     judge_report: dict[str, Any]    # full per-metric / per-category breakdown
@@ -130,9 +179,33 @@ class OrchestratorState(TypedDict, total=False):
     access_violation_rate: float    # A  (legacy key: privacy_leakage_rate)
     forgetting_failure_rate: float  # F  (legacy key: deletion_leakage_rate)
     proceed_to_full: bool           # the 50 -> 579 scale-up gate decision
+    # THE LOOP'S MEMORY OF ITS OWN SCORES -- one row per (iteration, stage) the
+    # Judge scored, appended and never reset.
+    #
+    # The four scalars above are the LATEST measurement and nothing else; every
+    # iteration overwrites them. That is what made a self-improving loop unable
+    # to tell improvement from collapse: `prepare_workspace` inherited the last
+    # code rather than the best code, the Architect was shown one iteration's
+    # numbers with no trend, the Critic had no way to say "revert", and
+    # `halt_reason` printed the final score under the label "best". All four
+    # read this list now. See scoreboard.py for the row shape and every
+    # derived quantity -- best-so-far, the champion, the regression verdict.
+    #
+    # `operator.add` and never reset, for the same reason as `critique_digest`:
+    # discarding it is discarding the only thing it is for.
+    score_history: Annotated[list[dict[str, Any]], operator.add]
 
     # ---------------- Critic writes ----------------
     critique: str
+    # WHICH iteration `critique` is from -- not always `iteration_count - 1`.
+    #
+    # A build that never compiled never reaches the Judge, so the Critic does not
+    # run and `critique` stays as whatever the last iteration that DID build
+    # produced. The Architect summarises the critique it is handed exactly once,
+    # and this is what it dedupes on: without it, a run with two failed builds
+    # would write the same critique into the recap three times and read that
+    # repetition as three separate iterations reaching the same conclusion.
+    critique_iteration: int
     attribution: dict[str, Any]     # per-term marginal contribution ranking
 
     # ---------------- Router / control-plane writes ----------------
@@ -221,6 +294,24 @@ class DeveloperState(TypedDict, total=False):
     lint_ok: bool
     smoke_ok: bool
     pass_rate: float
+    # WHETHER EACH GATE WAS EVER ACTUALLY ATTEMPTED, as opposed to merely being
+    # False. The three booleans above start False and are only ever set by their
+    # tool running, so `tests_ok=False` is ambiguous between "run_tests failed"
+    # and "run_tests was never called" -- and the failure report reported both
+    # as "unmet mandatory gate: tests_ok". run-8cf58d33b311 iteration 2 spent
+    # its episode on transport timeouts and never called run_tests OR sql_exec;
+    # the Architect was told its design had failed the tests, and redesigned.
+    #
+    # Shape: {gate_name: {"ran": int, "ok": bool}} -- `ran` counts completed
+    # calls of the gate's tool, `ok` is the latest outcome. Written by
+    # dev_observe; read by `classify_failure` and by the failure report.
+    gate_attempts: dict[str, Any]
+    # Model turns lost to the TRANSPORT rather than to the code: a timed-out
+    # completion, an empty reply, a dead endpoint. Counted separately from
+    # `retry_count` because they are evidence about the network, not about
+    # whether the design can be built. See classify_failure.
+    transport_failures: int
+    transport_errors: Annotated[list[str], operator.add]
     # A SUMMING accumulator, not last-write-wins. Every `dev_think` turn writes
     # this, and when it was overwritten instead a 20-turn episode reported the
     # cost of one turn. See the note in nodes/developer.py on why the
@@ -250,21 +341,31 @@ def initial_state(*, workspace: str, started_at: float) -> OrchestratorState:
         codebase_delta="",
         dev_set_pass_rate=0.0,
         dev_retries_used=0,
+        dev_turns_used=0,
+        dev_turn_ceiling=0,
         dev_files_changed=[],
         dev_failure_report={},
         dev_failure_history=[],
+        infra_retry_count=0,
+        architect_retry_count=0,
         eval_results=[],  # seeded empty; cleared later via the RESET sentinel
         eval_stage="dev",
         predictions_path="",
         n_checkpoints_evaluated=0,
         n_worker_failures=0,
+        render_degraded=False,
+        render_degraded_rate=0.0,
+        n_render_degraded=0,
         judge_report={},
         mgs_score=0.0,
         utility_score=0.0,
         access_violation_rate=1.0,
         forgetting_failure_rate=1.0,
         proceed_to_full=False,
+        score_history=[],
         critique="",
+        critique_iteration=0,
+        critique_digest=[],
         attribution={},
         iteration_count=0,
         current_curriculum_phase=CURRICULUM_PHASES[0],

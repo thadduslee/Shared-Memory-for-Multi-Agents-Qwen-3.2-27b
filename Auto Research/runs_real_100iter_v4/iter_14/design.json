@@ -1,0 +1,22 @@
+{
+  "targets_metric": "U",
+  "expected_tradeoff": "Raising U by restoring the champion's content-presence diagnostics is free on the A and F terms (the status census branches no decision path). A +0.0556..0.1111 U gain that perfects one or two of the six content-missing checkpoints leaves A and F unchanged. The risk is that the per-candidate status stays only a diagnostic and a later gate decision is telegraphed from it; the field must remain read nowhere by retrieve()/sanitize_and_decide() logic.",
+  "retrieval_loop": "Sequence for a single query (unchanged gates, adopted from iteration 11; no new branch may depend on the census):\n1. candidate scan over this patient's records with seq <= as_of_seq, hashed via the persistent store_meta index key;\n2. gate 0 responsiveness test; candidates that share no real content term (or no digit-run/contact structural signal) are skipped;\n3. rank survivors by (overlap_total desc, seq desc);\n4. apply RBAC x relationship join and scope filter, producing allowed / denied_rbac / denied_scope;\n5. tombstone check with tombstone_terms-scoped responsiveness -> denied_tombstone;\n6. populate query_answer_denials as the count of RBAC/scope denials that share a real content term;\n7. AFTER the above lists are final, append the candidate_census (a per-candidate, capped, read-nowhere list). Each entry carries the gate outcome for that candidate under the fixed status vocabulary allowed|deny_rbac|deny_scope|deny_tombstone|gate0_skip|unscanned. Nothing in this step branches action/answer/used_record_ids.",
+  "forgetting_mechanism": "Unchanged and inherited: tombstone() inserts the tombstone row, copies the record's term digests into tombstone_terms BEFORE deleting from record_terms, purges record_terms, and shreds the crypto key (key_material=NULL, shredded_at set, ciphertext zeroed in place). Plaintext routine bodies are overwritten to empty in the same transaction. Tombstone responsiveness in gate 1 uses preserve digests with is_structural=0 only. No deletion-visibility change this iteration.",
+  "work_order": [
+    "In memory_system/store.py, in Decision.candidate_census: re-add the per-candidate status attribution to the champion's Decision. During retrieve(), after scoring each scanned candidate and after the allowed/denied lists are final, record for that candidate exactly one of 'allowed', 'deny_rbac', 'deny_scope', 'deny_tombstone', 'gate0_skip', or 'unscanned' (cap the census at 64 entries). The census must be read by no gate and must never branch action/answer/used_record_ids.",
+    "In memory_system/store.py, retain the existing debug key tuple in retrieve()'s candidate_census so every census entry projects to (record_id, overlap_total, overlap_content, seq, rank, status). This restores the per-candidate status that iter-13 introduced and that was dropped because the iterate tied.",
+    "In memory_system/agent.py, GateMemAgent.query(): keep the existing census debug projection in the returned debug dict (list capped at 64 entries). Make no change that branches action, answer or used_record_ids on any census field.",
+    "Run tests/test_action_shape.py, tests/test_forgetting.py, tests/test_rbac.py, tests/test_deletion_scope.py and tests/test_utility_focus.py; all must pass, including test_census_status_is_diagnostic_and_from_allowed_set (status present, from the fixed set, gate0_skip visible for an unrelated scanned row)."
+  ],
+  "prior_art": [],
+  "dev_failure_mitigations": null,
+  "responds_to_dev_failure": null,
+  "critique_recap_added": [
+    {
+      "iteration": 13,
+      "kind": "critique",
+      "summary": "Previous critique found the top_k default revert 40->16 not guilty: it exactly restored the iter-11 champion (0.5392->0.5882) and the remaining plateau is six identical answered_but_content_missing checkpoints that survive caps 8/16/40. It blamed admission of the gold record into decision.allowed (retrieve(): gate-0 responsiveness vs RBAC/scope vs top_k truncation), exonerated the answer path ..."
+    }
+  ]
+}

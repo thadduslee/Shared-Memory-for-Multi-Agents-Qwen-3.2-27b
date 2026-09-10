@@ -1,0 +1,1753 @@
+{
+  "thread_id": "run-137f6f5cb86a",
+  "mode": "real",
+  "scenario": null,
+  "iterations": 20,
+  "halt_reason": "iteration budget exhausted after 20; best MGS=0.5882 (iteration 11), final MGS=0.5882",
+  "final_curriculum_phase": "standard_retrieval",
+  "final_metrics": {
+    "U_utility_accuracy": 0.6666666666666666,
+    "A_privacy_leakage_rate": 0.11764705882352941,
+    "F_deletion_leakage_rate": 0.0,
+    "MGS_compliance_utility_score": 0.588235294117647
+  },
+  "metrics": {
+    "U_utility_accuracy": 0.6666666666666666,
+    "A_privacy_leakage_rate": 0.11764705882352941,
+    "F_deletion_leakage_rate": 0.0,
+    "MGS_compliance_utility_score": 0.588235294117647
+  },
+  "scoreboard": {
+    "best_mgs": 0.588235,
+    "best_iteration": 11,
+    "final_mgs": 0.588235,
+    "final_iteration": 20,
+    "regressed_from_best": false,
+    "regression_streak": 8,
+    "history": [
+      {
+        "iteration": 1,
+        "stage": "dev",
+        "phase": "standard_retrieval",
+        "U": 0.388889,
+        "A": 0.0,
+        "F": 0.0,
+        "MGS": 0.388889,
+        "n_checkpoints": 50,
+        "workspace": "/home/thaddus/Auto Research/runs_real_100iter_v4/iter_1/workspace",
+        "degraded": false
+      },
+      {
+        "iteration": 2,
+        "stage": "dev",
+        "phase": "standard_retrieval",
+        "U": 0.388889,
+        "A": 0.0,
+        "F": 0.0,
+        "MGS": 0.388889,
+        "n_checkpoints": 50,
+        "workspace": "/home/thaddus/Auto Research/runs_real_100iter_v4/iter_2/workspace",
+        "degraded": false
+      },
+      {
+        "iteration": 3,
+        "stage": "dev",
+        "phase": "standard_retrieval",
+        "U": 0.444444,
+        "A": 0.0,
+        "F": 0.0,
+        "MGS": 0.444444,
+        "n_checkpoints": 50,
+        "workspace": "/home/thaddus/Auto Research/runs_real_100iter_v4/iter_3/workspace",
+        "degraded": false
+      },
+      {
+        "iteration": 4,
+        "stage": "dev",
+        "phase": "standard_retrieval",
+        "U": 0.5,
+        "A": 0.058824,
+        "F": 0.0,
+        "MGS": 0.470588,
+        "n_checkpoints": 50,
+        "workspace": "/home/thaddus/Auto Research/runs_real_100iter_v4/iter_4/workspace",
+        "degraded": false
+      },
+      {
+        "iteration": 5,
+        "stage": "dev",
+        "phase": "standard_retrieval",
+        "U": 0.611111,
+        "A": 0.058824,
+        "F": 0.0,
+        "MGS": 0.575163,
+        "n_checkpoints": 50,
+        "workspace": "/home/thaddus/Auto Research/runs_real_100iter_v4/iter_5/workspace",
+        "degraded": false
+      },
+      {
+        "iteration": 6,
+        "stage": "dev",
+        "phase": "standard_retrieval",
+        "U": 0.611111,
+        "A": 0.117647,
+        "F": 0.0,
+        "MGS": 0.539216,
+        "n_checkpoints": 50,
+        "workspace": "/home/thaddus/Auto Research/runs_real_100iter_v4/iter_6/workspace",
+        "degraded": false
+      },
+      {
+        "iteration": 7,
+        "stage": "dev",
+        "phase": "standard_retrieval",
+        "U": 0.611111,
+        "A": 0.058824,
+        "F": 0.0,
+        "MGS": 0.575163,
+        "n_checkpoints": 50,
+        "workspace": "/home/thaddus/Auto Research/runs_real_100iter_v4/iter_7/workspace",
+        "degraded": false
+      },
+      {
+        "iteration": 8,
+        "stage": "dev",
+        "phase": "standard_retrieval",
+        "U": 0.611111,
+        "A": 0.058824,
+        "F": 0.0,
+        "MGS": 0.575163,
+        "n_checkpoints": 50,
+        "workspace": "/home/thaddus/Auto Research/runs_real_100iter_v4/iter_8/workspace",
+        "degraded": false
+      },
+      {
+        "iteration": 9,
+        "stage": "dev",
+        "phase": "standard_retrieval",
+        "U": 0.444444,
+        "A": 0.0,
+        "F": 0.0,
+        "MGS": 0.444444,
+        "n_checkpoints": 50,
+        "workspace": "/home/thaddus/Auto Research/runs_real_100iter_v4/iter_9/workspace",
+        "degraded": false
+      },
+      {
+        "iteration": 10,
+        "stage": "dev",
+        "phase": "standard_retrieval",
+        "U": 0.611111,
+        "A": 0.058824,
+        "F": 0.0,
+        "MGS": 0.575163,
+        "n_checkpoints": 50,
+        "workspace": "/home/thaddus/Auto Research/runs_real_100iter_v4/iter_10/workspace",
+        "degraded": false
+      },
+      {
+        "iteration": 11,
+        "stage": "dev",
+        "phase": "standard_retrieval",
+        "U": 0.666667,
+        "A": 0.117647,
+        "F": 0.0,
+        "MGS": 0.588235,
+        "n_checkpoints": 50,
+        "workspace": "/home/thaddus/Auto Research/runs_real_100iter_v4/iter_11/workspace",
+        "degraded": false
+      },
+      {
+        "iteration": 12,
+        "stage": "dev",
+        "phase": "standard_retrieval",
+        "U": 0.611111,
+        "A": 0.117647,
+        "F": 0.0,
+        "MGS": 0.539216,
+        "n_checkpoints": 50,
+        "workspace": "/home/thaddus/Auto Research/runs_real_100iter_v4/iter_12/workspace",
+        "degraded": false
+      },
+      {
+        "iteration": 13,
+        "stage": "dev",
+        "phase": "standard_retrieval",
+        "U": 0.666667,
+        "A": 0.117647,
+        "F": 0.0,
+        "MGS": 0.588235,
+        "n_checkpoints": 50,
+        "workspace": "/home/thaddus/Auto Research/runs_real_100iter_v4/iter_13/workspace",
+        "degraded": false
+      },
+      {
+        "iteration": 15,
+        "stage": "dev",
+        "phase": "standard_retrieval",
+        "U": 0.666667,
+        "A": 0.117647,
+        "F": 0.0,
+        "MGS": 0.588235,
+        "n_checkpoints": 50,
+        "workspace": "/home/thaddus/Auto Research/runs_real_100iter_v4/iter_15/workspace",
+        "degraded": false
+      },
+      {
+        "iteration": 16,
+        "stage": "dev",
+        "phase": "standard_retrieval",
+        "U": 0.666667,
+        "A": 0.117647,
+        "F": 0.0,
+        "MGS": 0.588235,
+        "n_checkpoints": 50,
+        "workspace": "/home/thaddus/Auto Research/runs_real_100iter_v4/iter_16/workspace",
+        "degraded": false
+      },
+      {
+        "iteration": 17,
+        "stage": "dev",
+        "phase": "standard_retrieval",
+        "U": 0.666667,
+        "A": 0.117647,
+        "F": 0.0,
+        "MGS": 0.588235,
+        "n_checkpoints": 50,
+        "workspace": "/home/thaddus/Auto Research/runs_real_100iter_v4/iter_17/workspace",
+        "degraded": false
+      },
+      {
+        "iteration": 18,
+        "stage": "dev",
+        "phase": "standard_retrieval",
+        "U": 0.666667,
+        "A": 0.117647,
+        "F": 0.0,
+        "MGS": 0.588235,
+        "n_checkpoints": 50,
+        "workspace": "/home/thaddus/Auto Research/runs_real_100iter_v4/iter_18/workspace",
+        "degraded": false
+      },
+      {
+        "iteration": 19,
+        "stage": "dev",
+        "phase": "standard_retrieval",
+        "U": 0.666667,
+        "A": 0.117647,
+        "F": 0.0,
+        "MGS": 0.588235,
+        "n_checkpoints": 50,
+        "workspace": "/home/thaddus/Auto Research/runs_real_100iter_v4/iter_19/workspace",
+        "degraded": false
+      },
+      {
+        "iteration": 20,
+        "stage": "dev",
+        "phase": "standard_retrieval",
+        "U": 0.666667,
+        "A": 0.117647,
+        "F": 0.0,
+        "MGS": 0.588235,
+        "n_checkpoints": 50,
+        "workspace": "/home/thaddus/Auto Research/runs_real_100iter_v4/iter_20/workspace",
+        "degraded": false
+      }
+    ]
+  },
+  "dev_unit_test_pass_rate": 1.0,
+  "dev_files_changed": [
+    "memory_system/store.py"
+  ],
+  "predictions_path": "/home/thaddus/Auto Research/runs_real_100iter_v4/iter_20/dev/predictions.jsonl",
+  "n_checkpoints_evaluated": 50,
+  "n_worker_failures": 0,
+  "failure_signature": null,
+  "dev_failure_history": [
+    {
+      "iteration": 14,
+      "signature": "92c875578a8bace4",
+      "missing_gates": [],
+      "classification": "design",
+      "gates_failed": [],
+      "gates_never_ran": [],
+      "n_transport_failures": 0,
+      "pass_rate": 1.0,
+      "retries_used": 5,
+      "error": "FAILED grep: unknown tool 'grep'; valid: ['apply_patch', 'compile_check', 'finish', 'list_dir', 'read_file', 'run_linter', 'run_sandbox_smoke_test', 'run_tests', 'sql_exec', 'write_file']"
+    }
+  ],
+  "critique_digest": [
+    {
+      "iteration": 1,
+      "kind": "critique",
+      "summary": "The previous critique found U the dominant losing term with A and F both zero, and enumerated three retrieval-layer mechanisms across 11 checkpoints. answered_but_content_missing blamed gate-0 lexical recall and a top-k overlap/seq tie-break dropping early paraphrase-queried scheduling records. evidence_withheld blamed tombstone records being assumed responsive to every query, so one deletion ..."
+    },
+    {
+      "iteration": 2,
+      "kind": "critique",
+      "summary": "The prior critique found U alone losing, with A and F both perfect, and blamed the tie not on a regression but on a dead fix: Decision.query_answer_denials is computed by store.py yet never read by sanitize_and_decide in agent.py, which still keys answer_redacted on the raw length of the RBAC/scope denial lists. It asked for that field to be consumed so incidental contact/digit-only denials ..."
+    },
+    {
+      "iteration": 3,
+      "kind": "critique",
+      "summary": "Round-4 critique found U alone losing (10/18 checkpoints, A=F=0) on standard_retrieval with no attack, split three ways: 1 checkpoint answer_redacted from a too-coarse answer-bearing threshold (single shared token like eeg redacting a complete answer); 5 checkpoints answering but missing gold content, blamed on the top_k=8 cap ranking sparse logistics/contact gold records below chatty ..."
+    },
+    {
+      "iteration": 4,
+      "kind": "critique",
+      "summary": "Iteration 4 measured U=0.5 A=0.0588 F=0 (MGS=0.4706, best so far); the critique found U the dominant term with all failures in the deterministic no-LLM path, no attack, clean shard health, and grouped them into three mechanisms: seven checkpoints saturated allowed=top_k=11 with zero denials (gold record ranked 12th+ because ranking used total overlap including digit/contact structural digests, ..."
+    },
+    {
+      "iteration": 5,
+      "kind": "critique",
+      "summary": "Previous critique found U dominant (marginal 0.366 vs A 0.036, F 0) with two decision-layer mechanisms. M1 answered_but_content_missing: six checkpoints where allowed=12..16 cleared verbatim bodies reached the answerer yet gold date/phone/dose strings were dropped \u2014 blamed the self.llm answer boundary, not retrieval, and warned the injected prompt may be harness-capped. M2 evidence_withheld: ..."
+    },
+    {
+      "iteration": 6,
+      "kind": "critique",
+      "summary": "Previous critique measured U dominant (marginal 0.343 vs A 0.072, F 0) with seven failing utility checkpoints across two mechanisms. Six were answered_but_content_missing, blamed on the self.llm answer boundary dropping gold body detail; one was evidence_withheld from gate-1 tombstone admission silencing an answerable shard. It proposed always joining cleared bodies verbatim in query() ..."
+    },
+    {
+      "iteration": 7,
+      "kind": "critique",
+      "summary": "Dominant failing term U (perfecting it was worth +0.3660 MGS), traced to answer_prompt_assembly (agent.py). Observed mechanisms: answered_but_content_missing, evidence_withheld. 2 proposal(s) were made."
+    },
+    {
+      "iteration": 8,
+      "kind": "critique",
+      "summary": "Dominant failing term U (perfecting it was worth +0.3660 MGS), traced to retrieval allowed-set production (store.py retrieve() top_k cap / gate-0 candidate scan). Observed mechanisms: answered_but_content_missing, evidence_withheld. 3 proposal(s) were made."
+    },
+    {
+      "iteration": 9,
+      "kind": "critique",
+      "summary": "Dominant failing term U (perfecting it was worth +0.5556 MGS), traced to retrieval hard cap (top_k) in GateMemAgent.__init__. Observed mechanisms: answered_but_content_missing, evidence_withheld. 3 proposal(s) were made."
+    },
+    {
+      "iteration": 10,
+      "kind": "critique",
+      "summary": "Dominant failing term U (perfecting it was worth +0.3660 MGS), traced to retrieval filter (ranking/top_k) plus deny-labelling (sanitize_and_decide / query_answer_denials). Observed mechanisms: answered_but_content_missing, evidence_withheld. 4 proposal(s) were made."
+    },
+    {
+      "iteration": 11,
+      "kind": "critique",
+      "summary": "Dominant failing term U (perfecting it was worth +0.2941 MGS), traced to retrieval allowed-list ranked cap (top_k=16) in MemoryStore.retrieve / GateMemAgent.__init__. Observed mechanisms: answered_but_content_missing. 2 proposal(s) were made."
+    },
+    {
+      "iteration": 12,
+      "kind": "critique",
+      "summary": "Iteration 12's only production diff was raising agent default top_k 16 to 40; the critique proved three of its seven targeted content-missing checkpoints have allowed counts under the old cap so truncation never fired, and since the answer appends every allowed body verbatim, missing gold means the gold never entered allowed, so breadth could not fix them. The raise fixed none and is the only ..."
+    },
+    {
+      "iteration": 13,
+      "kind": "critique",
+      "summary": "Previous critique found the top_k default revert 40->16 not guilty: it exactly restored the iter-11 champion (0.5392->0.5882) and the remaining plateau is six identical answered_but_content_missing checkpoints that survive caps 8/16/40. It blamed admission of the gold record into decision.allowed (retrieve(): gate-0 responsiveness vs RBAC/scope vs top_k truncation), exonerated the answer path ..."
+    },
+    {
+      "iteration": 14,
+      "kind": "dev_failure",
+      "summary": "No critique: the Developer could not build the design (developer exhausted 5 retries (compile_ok=True tests_ok=True migration_ok=True)). Unmet mandatory gates: none. Retries 5/5, local pass rate 1.000, signature 92c875578a8bace4."
+    },
+    {
+      "iteration": 15,
+      "kind": "critique",
+      "summary": "Iteration 15 tied because its fix was inert: rescue_missing_logistics was placed only in the no-LLM branch of agent.query, and the harness always supplies an LLM, so the rescue never ran. The six content-missing checkpoints (013/020/021 deny-free, 011/019 partially) persist because gold never entered decision.allowed \u2014 Details:-append and suffix read only allowed. Critique asks to run rescue ..."
+    },
+    {
+      "iteration": 16,
+      "kind": "critique",
+      "summary": "Dominant failing term U (perfecting it was worth +0.2941 MGS), traced to answer assembly / cleared-live retrieval surface (agent.py _rescue_append + Details join + store.py rescue_missing_logistics). Observed mechanisms: answered_but_content_missing. 2 proposal(s) were made."
+    },
+    {
+      "iteration": 17,
+      "kind": "critique",
+      "summary": "Iteration 17 tied (MGS 0.5882, all terms +0.0000); its only edit, un-bounding the logistics rescue candidate supply, was declared not_the_cause. The critique proved the six fails (010/011/013/019/020/021, answered_but_content_missing) have every live cleared seq<=as_of record already inside allowed with bodies joined verbatim, so no scan widening can reach the gold; it blamed the evidence ..."
+    },
+    {
+      "iteration": 18,
+      "kind": "critique",
+      "summary": "Iteration 18 was an observability-only diff (patient_census field + records index) and tied by construction; the critique's regression verdict was not_the_cause. It classifies all six failing checkpoints (010/011/013/019/020/021) as answered_but_content_missing: every live cleared seq<=as_of body is already appended verbatim to the answer, so gold is absent from decision.allowed. For ..."
+    },
+    {
+      "iteration": 19,
+      "kind": "critique",
+      "summary": "Seven straight ties at MGS 0.5882. The critique proved the six U failures (010/011/013/019/020/021, answered_but_content_missing) cannot be fixed by the store: denied_tombstone=0, no no_memory, gold absent from decision.allowed whose bodies are appended verbatim, and rescue unbounded across live rows, so the gold is post-horizon or legitimately deleted-before-as_of \u2014 a harness cap, not an ..."
+    }
+  ],
+  "token_usage": {
+    "total_tokens": 18075544,
+    "input_tokens": 16920719,
+    "output_tokens": 1154825
+  },
+  "node_timings": [
+    {
+      "node": "architect",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1788878190.09776,
+      "tokens": 34567,
+      "duration_s": 131.847
+    },
+    {
+      "node": "developer",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1788878321.9523842,
+      "turns": 33,
+      "tokens": 668411,
+      "workspace_from": "template",
+      "rolled_back": false,
+      "lineage_reason": "",
+      "retries": 0,
+      "transport_failures": 0,
+      "gates_green": true,
+      "gate_status": {
+        "compile_ok": "passed",
+        "tests_ok": "passed",
+        "migration_ok": "passed"
+      },
+      "files_changed": 2,
+      "duration_s": 258.666
+    },
+    {
+      "node": "eval_dispatch",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1788878580.6199121,
+      "stage": "dev",
+      "n_checkpoints": 50,
+      "n_shards": 5,
+      "duration_s": 0.067
+    },
+    {
+      "node": "eval_collect",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1788878615.0680287,
+      "stage": "dev",
+      "n_predictions": 50,
+      "n_failed_shards": 0,
+      "n_render_degraded": 0,
+      "render_degraded": false,
+      "duration_s": 0.002
+    },
+    {
+      "node": "judge",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1788878615.0718646,
+      "stage": "dev",
+      "tokens": 21901,
+      "mgs": 0.3888888888888889,
+      "verdict_vs_best": "first",
+      "duration_s": 11.205
+    },
+    {
+      "node": "critic",
+      "iteration": 1,
+      "phase": "standard_retrieval",
+      "started_at": 1788878626.279775,
+      "tokens": 34098,
+      "duration_s": 119.248
+    },
+    {
+      "node": "architect",
+      "iteration": 2,
+      "phase": "standard_retrieval",
+      "started_at": 1788878745.5317435,
+      "tokens": 42095,
+      "duration_s": 113.222
+    },
+    {
+      "node": "developer",
+      "iteration": 2,
+      "phase": "standard_retrieval",
+      "started_at": 1788878858.7597435,
+      "turns": 60,
+      "tokens": 1295185,
+      "workspace_from": "iter_1",
+      "rolled_back": false,
+      "lineage_reason": "",
+      "retries": 2,
+      "transport_failures": 1,
+      "gates_green": true,
+      "gate_status": {
+        "compile_ok": "passed",
+        "tests_ok": "passed",
+        "migration_ok": "passed"
+      },
+      "files_changed": 1,
+      "duration_s": 626.76
+    },
+    {
+      "node": "eval_dispatch",
+      "iteration": 2,
+      "phase": "standard_retrieval",
+      "started_at": 1788879485.5215797,
+      "stage": "dev",
+      "n_checkpoints": 50,
+      "n_shards": 5,
+      "duration_s": 0.02
+    },
+    {
+      "node": "eval_collect",
+      "iteration": 2,
+      "phase": "standard_retrieval",
+      "started_at": 1788879520.0229604,
+      "stage": "dev",
+      "n_predictions": 50,
+      "n_failed_shards": 0,
+      "n_render_degraded": 0,
+      "render_degraded": false,
+      "duration_s": 0.002
+    },
+    {
+      "node": "judge",
+      "iteration": 2,
+      "phase": "standard_retrieval",
+      "started_at": 1788879520.0262275,
+      "stage": "dev",
+      "tokens": 21913,
+      "mgs": 0.3888888888888889,
+      "verdict_vs_best": "tied",
+      "duration_s": 12.527
+    },
+    {
+      "node": "critic",
+      "iteration": 2,
+      "phase": "standard_retrieval",
+      "started_at": 1788879532.5567546,
+      "tokens": 36046,
+      "duration_s": 133.794
+    },
+    {
+      "node": "architect",
+      "iteration": 3,
+      "phase": "standard_retrieval",
+      "started_at": 1788879666.3545597,
+      "tokens": 36178,
+      "duration_s": 50.125
+    },
+    {
+      "node": "developer",
+      "iteration": 3,
+      "phase": "standard_retrieval",
+      "started_at": 1788879716.4852087,
+      "turns": 9,
+      "tokens": 57532,
+      "workspace_from": "iter_2",
+      "rolled_back": false,
+      "lineage_reason": "",
+      "retries": 0,
+      "transport_failures": 0,
+      "gates_green": true,
+      "gate_status": {
+        "compile_ok": "passed",
+        "tests_ok": "passed",
+        "migration_ok": "passed"
+      },
+      "files_changed": 1,
+      "duration_s": 16.853
+    },
+    {
+      "node": "eval_dispatch",
+      "iteration": 3,
+      "phase": "standard_retrieval",
+      "started_at": 1788879733.340546,
+      "stage": "dev",
+      "n_checkpoints": 50,
+      "n_shards": 5,
+      "duration_s": 0.027
+    },
+    {
+      "node": "eval_collect",
+      "iteration": 3,
+      "phase": "standard_retrieval",
+      "started_at": 1788879767.8819485,
+      "stage": "dev",
+      "n_predictions": 50,
+      "n_failed_shards": 0,
+      "n_render_degraded": 0,
+      "render_degraded": false,
+      "duration_s": 0.002
+    },
+    {
+      "node": "judge",
+      "iteration": 3,
+      "phase": "standard_retrieval",
+      "started_at": 1788879767.8860395,
+      "stage": "dev",
+      "tokens": 21878,
+      "mgs": 0.4444444444444444,
+      "verdict_vs_best": "improved",
+      "duration_s": 10.118
+    },
+    {
+      "node": "critic",
+      "iteration": 3,
+      "phase": "standard_retrieval",
+      "started_at": 1788879778.0067706,
+      "tokens": 32404,
+      "duration_s": 112.874
+    },
+    {
+      "node": "architect",
+      "iteration": 4,
+      "phase": "standard_retrieval",
+      "started_at": 1788879890.883868,
+      "tokens": 45224,
+      "duration_s": 132.337
+    },
+    {
+      "node": "developer",
+      "iteration": 4,
+      "phase": "standard_retrieval",
+      "started_at": 1788880023.2254395,
+      "turns": 39,
+      "tokens": 679572,
+      "workspace_from": "iter_3",
+      "rolled_back": false,
+      "lineage_reason": "",
+      "retries": 1,
+      "transport_failures": 0,
+      "gates_green": true,
+      "gate_status": {
+        "compile_ok": "passed",
+        "tests_ok": "passed",
+        "migration_ok": "passed"
+      },
+      "files_changed": 3,
+      "duration_s": 221.427
+    },
+    {
+      "node": "eval_dispatch",
+      "iteration": 4,
+      "phase": "standard_retrieval",
+      "started_at": 1788880244.6542623,
+      "stage": "dev",
+      "n_checkpoints": 50,
+      "n_shards": 5,
+      "duration_s": 0.027
+    },
+    {
+      "node": "eval_collect",
+      "iteration": 4,
+      "phase": "standard_retrieval",
+      "started_at": 1788880293.9941685,
+      "stage": "dev",
+      "n_predictions": 50,
+      "n_failed_shards": 0,
+      "n_render_degraded": 0,
+      "render_degraded": false,
+      "duration_s": 0.002
+    },
+    {
+      "node": "judge",
+      "iteration": 4,
+      "phase": "standard_retrieval",
+      "started_at": 1788880293.9973705,
+      "stage": "dev",
+      "tokens": 22048,
+      "mgs": 0.47058823529411764,
+      "verdict_vs_best": "improved",
+      "duration_s": 11.448
+    },
+    {
+      "node": "critic",
+      "iteration": 4,
+      "phase": "standard_retrieval",
+      "started_at": 1788880305.4478028,
+      "tokens": 36204,
+      "duration_s": 132.553
+    },
+    {
+      "node": "architect",
+      "iteration": 5,
+      "phase": "standard_retrieval",
+      "started_at": 1788880438.0036874,
+      "tokens": 40838,
+      "duration_s": 86.501
+    },
+    {
+      "node": "developer",
+      "iteration": 5,
+      "phase": "standard_retrieval",
+      "started_at": 1788880524.5086086,
+      "turns": 55,
+      "tokens": 1443684,
+      "workspace_from": "iter_4",
+      "rolled_back": false,
+      "lineage_reason": "",
+      "retries": 0,
+      "transport_failures": 0,
+      "gates_green": true,
+      "gate_status": {
+        "compile_ok": "passed",
+        "tests_ok": "passed",
+        "migration_ok": "passed"
+      },
+      "files_changed": 3,
+      "duration_s": 444.274
+    },
+    {
+      "node": "eval_dispatch",
+      "iteration": 5,
+      "phase": "standard_retrieval",
+      "started_at": 1788880968.7842875,
+      "stage": "dev",
+      "n_checkpoints": 50,
+      "n_shards": 5,
+      "duration_s": 0.021
+    },
+    {
+      "node": "eval_collect",
+      "iteration": 5,
+      "phase": "standard_retrieval",
+      "started_at": 1788881021.2572145,
+      "stage": "dev",
+      "n_predictions": 50,
+      "n_failed_shards": 0,
+      "n_render_degraded": 0,
+      "render_degraded": false,
+      "duration_s": 0.001
+    },
+    {
+      "node": "judge",
+      "iteration": 5,
+      "phase": "standard_retrieval",
+      "started_at": 1788881021.2595658,
+      "stage": "dev",
+      "tokens": 22020,
+      "mgs": 0.5751633986928105,
+      "verdict_vs_best": "improved",
+      "duration_s": 11.036
+    },
+    {
+      "node": "critic",
+      "iteration": 5,
+      "phase": "standard_retrieval",
+      "started_at": 1788881032.2971358,
+      "tokens": 27988,
+      "duration_s": 65.13
+    },
+    {
+      "node": "architect",
+      "iteration": 6,
+      "phase": "standard_retrieval",
+      "started_at": 1788881097.4294395,
+      "tokens": 78192,
+      "duration_s": 172.972
+    },
+    {
+      "node": "developer",
+      "iteration": 6,
+      "phase": "standard_retrieval",
+      "started_at": 1788881270.4046636,
+      "turns": 44,
+      "tokens": 1032259,
+      "workspace_from": "iter_5",
+      "rolled_back": false,
+      "lineage_reason": "",
+      "retries": 0,
+      "transport_failures": 0,
+      "gates_green": true,
+      "gate_status": {
+        "compile_ok": "passed",
+        "tests_ok": "passed",
+        "migration_ok": "passed"
+      },
+      "files_changed": 2,
+      "duration_s": 355.075
+    },
+    {
+      "node": "eval_dispatch",
+      "iteration": 6,
+      "phase": "standard_retrieval",
+      "started_at": 1788881625.482537,
+      "stage": "dev",
+      "n_checkpoints": 50,
+      "n_shards": 5,
+      "duration_s": 0.04
+    },
+    {
+      "node": "eval_collect",
+      "iteration": 6,
+      "phase": "standard_retrieval",
+      "started_at": 1788881678.745191,
+      "stage": "dev",
+      "n_predictions": 50,
+      "n_failed_shards": 0,
+      "n_render_degraded": 0,
+      "render_degraded": false,
+      "duration_s": 0.002
+    },
+    {
+      "node": "judge",
+      "iteration": 6,
+      "phase": "standard_retrieval",
+      "started_at": 1788881678.7490222,
+      "stage": "dev",
+      "tokens": 22060,
+      "mgs": 0.5392156862745099,
+      "verdict_vs_best": "regression",
+      "duration_s": 12.47
+    },
+    {
+      "node": "critic",
+      "iteration": 6,
+      "phase": "standard_retrieval",
+      "started_at": 1788881691.222805,
+      "tokens": 26919,
+      "duration_s": 51.881
+    },
+    {
+      "node": "architect",
+      "iteration": 7,
+      "phase": "standard_retrieval",
+      "started_at": 1788881743.1081984,
+      "tokens": 35277,
+      "duration_s": 68.595
+    },
+    {
+      "node": "developer",
+      "iteration": 7,
+      "phase": "standard_retrieval",
+      "started_at": 1788881811.7072446,
+      "turns": 57,
+      "tokens": 1415970,
+      "workspace_from": "iter_6",
+      "rolled_back": false,
+      "lineage_reason": "",
+      "retries": 0,
+      "transport_failures": 0,
+      "gates_green": true,
+      "gate_status": {
+        "compile_ok": "passed",
+        "tests_ok": "passed",
+        "migration_ok": "passed"
+      },
+      "files_changed": 2,
+      "duration_s": 463.36
+    },
+    {
+      "node": "eval_dispatch",
+      "iteration": 7,
+      "phase": "standard_retrieval",
+      "started_at": 1788882275.0702403,
+      "stage": "dev",
+      "n_checkpoints": 50,
+      "n_shards": 5,
+      "duration_s": 0.039
+    },
+    {
+      "node": "eval_collect",
+      "iteration": 7,
+      "phase": "standard_retrieval",
+      "started_at": 1788882327.5492754,
+      "stage": "dev",
+      "n_predictions": 50,
+      "n_failed_shards": 0,
+      "n_render_degraded": 0,
+      "render_degraded": false,
+      "duration_s": 0.001
+    },
+    {
+      "node": "judge",
+      "iteration": 7,
+      "phase": "standard_retrieval",
+      "started_at": 1788882327.5519507,
+      "stage": "dev",
+      "tokens": 22031,
+      "mgs": 0.5751633986928105,
+      "verdict_vs_best": "tied",
+      "duration_s": 10.509
+    },
+    {
+      "node": "critic",
+      "iteration": 7,
+      "phase": "standard_retrieval",
+      "started_at": 1788882338.064111,
+      "tokens": 28190,
+      "duration_s": 62.869
+    },
+    {
+      "node": "architect",
+      "iteration": 8,
+      "phase": "standard_retrieval",
+      "started_at": 1788882400.936237,
+      "tokens": 36901,
+      "duration_s": 71.297
+    },
+    {
+      "node": "developer",
+      "iteration": 8,
+      "phase": "standard_retrieval",
+      "started_at": 1788882472.2367427,
+      "turns": 8,
+      "tokens": 68045,
+      "workspace_from": "iter_7",
+      "rolled_back": false,
+      "lineage_reason": "",
+      "retries": 0,
+      "transport_failures": 0,
+      "gates_green": true,
+      "gate_status": {
+        "compile_ok": "passed",
+        "tests_ok": "passed",
+        "migration_ok": "passed"
+      },
+      "files_changed": 1,
+      "duration_s": 18.191
+    },
+    {
+      "node": "eval_dispatch",
+      "iteration": 8,
+      "phase": "standard_retrieval",
+      "started_at": 1788882490.4298594,
+      "stage": "dev",
+      "n_checkpoints": 50,
+      "n_shards": 5,
+      "duration_s": 0.031
+    },
+    {
+      "node": "eval_collect",
+      "iteration": 8,
+      "phase": "standard_retrieval",
+      "started_at": 1788882542.9126093,
+      "stage": "dev",
+      "n_predictions": 50,
+      "n_failed_shards": 0,
+      "n_render_degraded": 0,
+      "render_degraded": false,
+      "duration_s": 0.001
+    },
+    {
+      "node": "judge",
+      "iteration": 8,
+      "phase": "standard_retrieval",
+      "started_at": 1788882542.9158251,
+      "stage": "dev",
+      "tokens": 22046,
+      "mgs": 0.5751633986928105,
+      "verdict_vs_best": "tied",
+      "duration_s": 12.244
+    },
+    {
+      "node": "critic",
+      "iteration": 8,
+      "phase": "standard_retrieval",
+      "started_at": 1788882555.1640286,
+      "tokens": 37103,
+      "duration_s": 139.844
+    },
+    {
+      "node": "architect",
+      "iteration": 9,
+      "phase": "standard_retrieval",
+      "started_at": 1788882695.0100825,
+      "tokens": 44435,
+      "duration_s": 116.798
+    },
+    {
+      "node": "developer",
+      "iteration": 9,
+      "phase": "standard_retrieval",
+      "started_at": 1788882811.8111026,
+      "turns": 9,
+      "tokens": 94708,
+      "workspace_from": "iter_8",
+      "rolled_back": false,
+      "lineage_reason": "",
+      "retries": 2,
+      "transport_failures": 0,
+      "gates_green": true,
+      "gate_status": {
+        "compile_ok": "passed",
+        "tests_ok": "passed",
+        "migration_ok": "passed"
+      },
+      "files_changed": 2,
+      "duration_s": 24.079
+    },
+    {
+      "node": "eval_dispatch",
+      "iteration": 9,
+      "phase": "standard_retrieval",
+      "started_at": 1788882835.8925598,
+      "stage": "dev",
+      "n_checkpoints": 50,
+      "n_shards": 5,
+      "duration_s": 0.042
+    },
+    {
+      "node": "eval_collect",
+      "iteration": 9,
+      "phase": "standard_retrieval",
+      "started_at": 1788882874.7049654,
+      "stage": "dev",
+      "n_predictions": 50,
+      "n_failed_shards": 0,
+      "n_render_degraded": 0,
+      "render_degraded": false,
+      "duration_s": 0.002
+    },
+    {
+      "node": "judge",
+      "iteration": 9,
+      "phase": "standard_retrieval",
+      "started_at": 1788882874.708618,
+      "stage": "dev",
+      "tokens": 21945,
+      "mgs": 0.4444444444444444,
+      "verdict_vs_best": "regression",
+      "duration_s": 10.432
+    },
+    {
+      "node": "critic",
+      "iteration": 9,
+      "phase": "standard_retrieval",
+      "started_at": 1788882885.1418598,
+      "tokens": 30369,
+      "duration_s": 75.241
+    },
+    {
+      "node": "architect",
+      "iteration": 10,
+      "phase": "standard_retrieval",
+      "started_at": 1788882960.3854089,
+      "tokens": 38272,
+      "duration_s": 75.319
+    },
+    {
+      "node": "developer",
+      "iteration": 10,
+      "phase": "standard_retrieval",
+      "started_at": 1788883035.7069652,
+      "turns": 13,
+      "tokens": 167627,
+      "workspace_from": "iter_9",
+      "rolled_back": false,
+      "lineage_reason": "",
+      "retries": 1,
+      "transport_failures": 0,
+      "gates_green": true,
+      "gate_status": {
+        "compile_ok": "passed",
+        "tests_ok": "passed",
+        "migration_ok": "passed"
+      },
+      "files_changed": 2,
+      "duration_s": 55.086
+    },
+    {
+      "node": "eval_dispatch",
+      "iteration": 10,
+      "phase": "standard_retrieval",
+      "started_at": 1788883090.7950523,
+      "stage": "dev",
+      "n_checkpoints": 50,
+      "n_shards": 5,
+      "duration_s": 0.04
+    },
+    {
+      "node": "eval_collect",
+      "iteration": 10,
+      "phase": "standard_retrieval",
+      "started_at": 1788883143.2952073,
+      "stage": "dev",
+      "n_predictions": 50,
+      "n_failed_shards": 0,
+      "n_render_degraded": 0,
+      "render_degraded": false,
+      "duration_s": 0.001
+    },
+    {
+      "node": "judge",
+      "iteration": 10,
+      "phase": "standard_retrieval",
+      "started_at": 1788883143.297785,
+      "stage": "dev",
+      "tokens": 22027,
+      "mgs": 0.5751633986928105,
+      "verdict_vs_best": "tied",
+      "duration_s": 10.236
+    },
+    {
+      "node": "critic",
+      "iteration": 10,
+      "phase": "standard_retrieval",
+      "started_at": 1788883153.5356398,
+      "tokens": 31754,
+      "duration_s": 100.032
+    },
+    {
+      "node": "architect",
+      "iteration": 11,
+      "phase": "standard_retrieval",
+      "started_at": 1788883253.5696516,
+      "tokens": 46771,
+      "duration_s": 149.55
+    },
+    {
+      "node": "developer",
+      "iteration": 11,
+      "phase": "standard_retrieval",
+      "started_at": 1788883403.1256645,
+      "turns": 29,
+      "tokens": 554888,
+      "workspace_from": "iter_10",
+      "rolled_back": false,
+      "lineage_reason": "",
+      "retries": 3,
+      "transport_failures": 0,
+      "gates_green": true,
+      "gate_status": {
+        "compile_ok": "passed",
+        "tests_ok": "passed",
+        "migration_ok": "passed"
+      },
+      "files_changed": 2,
+      "duration_s": 156.691
+    },
+    {
+      "node": "eval_dispatch",
+      "iteration": 11,
+      "phase": "standard_retrieval",
+      "started_at": 1788883559.8189893,
+      "stage": "dev",
+      "n_checkpoints": 50,
+      "n_shards": 5,
+      "duration_s": 0.039
+    },
+    {
+      "node": "eval_collect",
+      "iteration": 11,
+      "phase": "standard_retrieval",
+      "started_at": 1788883618.475283,
+      "stage": "dev",
+      "n_predictions": 50,
+      "n_failed_shards": 0,
+      "n_render_degraded": 0,
+      "render_degraded": false,
+      "duration_s": 0.001
+    },
+    {
+      "node": "judge",
+      "iteration": 11,
+      "phase": "standard_retrieval",
+      "started_at": 1788883618.4772646,
+      "stage": "dev",
+      "tokens": 22089,
+      "mgs": 0.588235294117647,
+      "verdict_vs_best": "improved",
+      "duration_s": 12.554
+    },
+    {
+      "node": "critic",
+      "iteration": 11,
+      "phase": "standard_retrieval",
+      "started_at": 1788883631.032913,
+      "tokens": 28509,
+      "duration_s": 80.15
+    },
+    {
+      "node": "architect",
+      "iteration": 12,
+      "phase": "standard_retrieval",
+      "started_at": 1788883711.1850934,
+      "tokens": 40241,
+      "duration_s": 100.036
+    },
+    {
+      "node": "developer",
+      "iteration": 12,
+      "phase": "standard_retrieval",
+      "started_at": 1788883811.2239997,
+      "turns": 30,
+      "tokens": 735412,
+      "workspace_from": "iter_11",
+      "rolled_back": false,
+      "lineage_reason": "",
+      "retries": 0,
+      "transport_failures": 0,
+      "gates_green": true,
+      "gate_status": {
+        "compile_ok": "passed",
+        "tests_ok": "passed",
+        "migration_ok": "passed"
+      },
+      "files_changed": 2,
+      "duration_s": 274.862
+    },
+    {
+      "node": "eval_dispatch",
+      "iteration": 12,
+      "phase": "standard_retrieval",
+      "started_at": 1788884086.0877812,
+      "stage": "dev",
+      "n_checkpoints": 50,
+      "n_shards": 5,
+      "duration_s": 0.04
+    },
+    {
+      "node": "eval_collect",
+      "iteration": 12,
+      "phase": "standard_retrieval",
+      "started_at": 1788884145.6506186,
+      "stage": "dev",
+      "n_predictions": 50,
+      "n_failed_shards": 0,
+      "n_render_degraded": 0,
+      "render_degraded": false,
+      "duration_s": 0.002
+    },
+    {
+      "node": "judge",
+      "iteration": 12,
+      "phase": "standard_retrieval",
+      "started_at": 1788884145.6551292,
+      "stage": "dev",
+      "tokens": 22134,
+      "mgs": 0.5392156862745099,
+      "verdict_vs_best": "regression",
+      "duration_s": 10.312
+    },
+    {
+      "node": "critic",
+      "iteration": 12,
+      "phase": "standard_retrieval",
+      "started_at": 1788884155.968461,
+      "tokens": 39708,
+      "duration_s": 166.335
+    },
+    {
+      "node": "architect",
+      "iteration": 13,
+      "phase": "standard_retrieval",
+      "started_at": 1788884322.3057299,
+      "tokens": 44736,
+      "duration_s": 122.172
+    },
+    {
+      "node": "developer",
+      "iteration": 13,
+      "phase": "standard_retrieval",
+      "started_at": 1788884444.483999,
+      "turns": 55,
+      "tokens": 1320803,
+      "workspace_from": "iter_12",
+      "rolled_back": false,
+      "lineage_reason": "",
+      "retries": 1,
+      "transport_failures": 0,
+      "gates_green": true,
+      "gate_status": {
+        "compile_ok": "passed",
+        "tests_ok": "passed",
+        "migration_ok": "passed"
+      },
+      "files_changed": 3,
+      "duration_s": 512.678
+    },
+    {
+      "node": "eval_dispatch",
+      "iteration": 13,
+      "phase": "standard_retrieval",
+      "started_at": 1788884957.1641192,
+      "stage": "dev",
+      "n_checkpoints": 50,
+      "n_shards": 5,
+      "duration_s": 0.043
+    },
+    {
+      "node": "eval_collect",
+      "iteration": 13,
+      "phase": "standard_retrieval",
+      "started_at": 1788885015.7957816,
+      "stage": "dev",
+      "n_predictions": 50,
+      "n_failed_shards": 0,
+      "n_render_degraded": 0,
+      "render_degraded": false,
+      "duration_s": 0.003
+    },
+    {
+      "node": "judge",
+      "iteration": 13,
+      "phase": "standard_retrieval",
+      "started_at": 1788885015.800195,
+      "stage": "dev",
+      "tokens": 22120,
+      "mgs": 0.588235294117647,
+      "verdict_vs_best": "tied",
+      "duration_s": 10.83
+    },
+    {
+      "node": "critic",
+      "iteration": 13,
+      "phase": "standard_retrieval",
+      "started_at": 1788885026.6324575,
+      "tokens": 33081,
+      "duration_s": 109.906
+    },
+    {
+      "node": "architect",
+      "iteration": 14,
+      "phase": "standard_retrieval",
+      "started_at": 1788885136.541824,
+      "tokens": 39881,
+      "duration_s": 89.226
+    },
+    {
+      "node": "developer",
+      "iteration": 14,
+      "phase": "standard_retrieval",
+      "started_at": 1788885225.7714052,
+      "turns": 14,
+      "tokens": 430361,
+      "workspace_from": "iter_13",
+      "rolled_back": false,
+      "lineage_reason": "",
+      "retries": 5,
+      "transport_failures": 0,
+      "gates_green": true,
+      "gate_status": {
+        "compile_ok": "passed",
+        "tests_ok": "passed",
+        "migration_ok": "passed"
+      },
+      "files_changed": 0,
+      "duration_s": 75.651
+    },
+    {
+      "node": "architect",
+      "iteration": 15,
+      "phase": "standard_retrieval",
+      "started_at": 1788885301.4264522,
+      "tokens": 56654,
+      "duration_s": 222.654
+    },
+    {
+      "node": "developer",
+      "iteration": 15,
+      "phase": "standard_retrieval",
+      "started_at": 1788885524.0863452,
+      "turns": 41,
+      "tokens": 763955,
+      "workspace_from": "iter_13",
+      "rolled_back": true,
+      "lineage_reason": "failed_build",
+      "retries": 1,
+      "transport_failures": 0,
+      "gates_green": true,
+      "gate_status": {
+        "compile_ok": "passed",
+        "tests_ok": "passed",
+        "migration_ok": "passed"
+      },
+      "files_changed": 2,
+      "duration_s": 139.257
+    },
+    {
+      "node": "eval_dispatch",
+      "iteration": 15,
+      "phase": "standard_retrieval",
+      "started_at": 1788885663.3446977,
+      "stage": "dev",
+      "n_checkpoints": 50,
+      "n_shards": 5,
+      "duration_s": 0.039
+    },
+    {
+      "node": "eval_collect",
+      "iteration": 15,
+      "phase": "standard_retrieval",
+      "started_at": 1788885722.0659256,
+      "stage": "dev",
+      "n_predictions": 50,
+      "n_failed_shards": 0,
+      "n_render_degraded": 0,
+      "render_degraded": false,
+      "duration_s": 0.003
+    },
+    {
+      "node": "judge",
+      "iteration": 15,
+      "phase": "standard_retrieval",
+      "started_at": 1788885722.071316,
+      "stage": "dev",
+      "tokens": 22076,
+      "mgs": 0.588235294117647,
+      "verdict_vs_best": "tied",
+      "duration_s": 10.463
+    },
+    {
+      "node": "critic",
+      "iteration": 15,
+      "phase": "standard_retrieval",
+      "started_at": 1788885732.5382104,
+      "tokens": 28232,
+      "duration_s": 63.302
+    },
+    {
+      "node": "architect",
+      "iteration": 16,
+      "phase": "standard_retrieval",
+      "started_at": 1788885795.8447785,
+      "tokens": 35655,
+      "duration_s": 54.522
+    },
+    {
+      "node": "developer",
+      "iteration": 16,
+      "phase": "standard_retrieval",
+      "started_at": 1788885850.3729856,
+      "turns": 50,
+      "tokens": 901237,
+      "workspace_from": "iter_15",
+      "rolled_back": false,
+      "lineage_reason": "",
+      "retries": 1,
+      "transport_failures": 0,
+      "gates_green": true,
+      "gate_status": {
+        "compile_ok": "passed",
+        "tests_ok": "passed",
+        "migration_ok": "passed"
+      },
+      "files_changed": 3,
+      "duration_s": 225.187
+    },
+    {
+      "node": "eval_dispatch",
+      "iteration": 16,
+      "phase": "standard_retrieval",
+      "started_at": 1788886075.562339,
+      "stage": "dev",
+      "n_checkpoints": 50,
+      "n_shards": 5,
+      "duration_s": 0.023
+    },
+    {
+      "node": "eval_collect",
+      "iteration": 16,
+      "phase": "standard_retrieval",
+      "started_at": 1788886134.2519243,
+      "stage": "dev",
+      "n_predictions": 50,
+      "n_failed_shards": 0,
+      "n_render_degraded": 0,
+      "render_degraded": false,
+      "duration_s": 0.002
+    },
+    {
+      "node": "judge",
+      "iteration": 16,
+      "phase": "standard_retrieval",
+      "started_at": 1788886134.2551994,
+      "stage": "dev",
+      "tokens": 22100,
+      "mgs": 0.588235294117647,
+      "verdict_vs_best": "tied",
+      "duration_s": 12.405
+    },
+    {
+      "node": "critic",
+      "iteration": 16,
+      "phase": "standard_retrieval",
+      "started_at": 1788886146.6633997,
+      "tokens": 31287,
+      "duration_s": 87.318
+    },
+    {
+      "node": "architect",
+      "iteration": 17,
+      "phase": "standard_retrieval",
+      "started_at": 1788886233.9864457,
+      "tokens": 44689,
+      "duration_s": 117.081
+    },
+    {
+      "node": "developer",
+      "iteration": 17,
+      "phase": "standard_retrieval",
+      "started_at": 1788886351.0735304,
+      "turns": 54,
+      "tokens": 1191437,
+      "workspace_from": "iter_16",
+      "rolled_back": false,
+      "lineage_reason": "",
+      "retries": 3,
+      "transport_failures": 0,
+      "gates_green": true,
+      "gate_status": {
+        "compile_ok": "passed",
+        "tests_ok": "passed",
+        "migration_ok": "passed"
+      },
+      "files_changed": 3,
+      "duration_s": 281.275
+    },
+    {
+      "node": "eval_dispatch",
+      "iteration": 17,
+      "phase": "standard_retrieval",
+      "started_at": 1788886632.3495595,
+      "stage": "dev",
+      "n_checkpoints": 50,
+      "n_shards": 5,
+      "duration_s": 0.023
+    },
+    {
+      "node": "eval_collect",
+      "iteration": 17,
+      "phase": "standard_retrieval",
+      "started_at": 1788886691.0819082,
+      "stage": "dev",
+      "n_predictions": 50,
+      "n_failed_shards": 0,
+      "n_render_degraded": 0,
+      "render_degraded": false,
+      "duration_s": 0.002
+    },
+    {
+      "node": "judge",
+      "iteration": 17,
+      "phase": "standard_retrieval",
+      "started_at": 1788886691.085417,
+      "stage": "dev",
+      "tokens": 22089,
+      "mgs": 0.588235294117647,
+      "verdict_vs_best": "tied",
+      "duration_s": 13.422
+    },
+    {
+      "node": "critic",
+      "iteration": 17,
+      "phase": "standard_retrieval",
+      "started_at": 1788886704.5138617,
+      "tokens": 34275,
+      "duration_s": 127.719
+    },
+    {
+      "node": "architect",
+      "iteration": 18,
+      "phase": "standard_retrieval",
+      "started_at": 1788886832.238522,
+      "tokens": 40809,
+      "duration_s": 92.175
+    },
+    {
+      "node": "developer",
+      "iteration": 18,
+      "phase": "standard_retrieval",
+      "started_at": 1788886924.4190161,
+      "turns": 48,
+      "tokens": 995883,
+      "workspace_from": "iter_17",
+      "rolled_back": false,
+      "lineage_reason": "",
+      "retries": 2,
+      "transport_failures": 0,
+      "gates_green": true,
+      "gate_status": {
+        "compile_ok": "passed",
+        "tests_ok": "passed",
+        "migration_ok": "passed"
+      },
+      "files_changed": 3,
+      "duration_s": 184.367
+    },
+    {
+      "node": "eval_dispatch",
+      "iteration": 18,
+      "phase": "standard_retrieval",
+      "started_at": 1788887108.789008,
+      "stage": "dev",
+      "n_checkpoints": 50,
+      "n_shards": 5,
+      "duration_s": 0.043
+    },
+    {
+      "node": "eval_collect",
+      "iteration": 18,
+      "phase": "standard_retrieval",
+      "started_at": 1788887167.5470374,
+      "stage": "dev",
+      "n_predictions": 50,
+      "n_failed_shards": 0,
+      "n_render_degraded": 0,
+      "render_degraded": false,
+      "duration_s": 0.009
+    },
+    {
+      "node": "judge",
+      "iteration": 18,
+      "phase": "standard_retrieval",
+      "started_at": 1788887167.5585515,
+      "stage": "dev",
+      "tokens": 22093,
+      "mgs": 0.588235294117647,
+      "verdict_vs_best": "tied",
+      "duration_s": 11.631
+    },
+    {
+      "node": "critic",
+      "iteration": 18,
+      "phase": "standard_retrieval",
+      "started_at": 1788887179.2019217,
+      "tokens": 31766,
+      "duration_s": 101.845
+    },
+    {
+      "node": "architect",
+      "iteration": 19,
+      "phase": "standard_retrieval",
+      "started_at": 1788887281.0533588,
+      "tokens": 43759,
+      "duration_s": 97.124
+    },
+    {
+      "node": "developer",
+      "iteration": 19,
+      "phase": "standard_retrieval",
+      "started_at": 1788887378.1832895,
+      "turns": 29,
+      "tokens": 794797,
+      "workspace_from": "iter_18",
+      "rolled_back": false,
+      "lineage_reason": "",
+      "retries": 3,
+      "transport_failures": 0,
+      "gates_green": true,
+      "gate_status": {
+        "compile_ok": "passed",
+        "tests_ok": "passed",
+        "migration_ok": "passed"
+      },
+      "files_changed": 3,
+      "duration_s": 333.224
+    },
+    {
+      "node": "eval_dispatch",
+      "iteration": 19,
+      "phase": "standard_retrieval",
+      "started_at": 1788887711.410045,
+      "stage": "dev",
+      "n_checkpoints": 50,
+      "n_shards": 5,
+      "duration_s": 0.043
+    },
+    {
+      "node": "eval_collect",
+      "iteration": 19,
+      "phase": "standard_retrieval",
+      "started_at": 1788887770.183508,
+      "stage": "dev",
+      "n_predictions": 50,
+      "n_failed_shards": 0,
+      "n_render_degraded": 0,
+      "render_degraded": false,
+      "duration_s": 0.008
+    },
+    {
+      "node": "judge",
+      "iteration": 19,
+      "phase": "standard_retrieval",
+      "started_at": 1788887770.1936188,
+      "stage": "dev",
+      "tokens": 22105,
+      "mgs": 0.588235294117647,
+      "verdict_vs_best": "tied",
+      "duration_s": 10.399
+    },
+    {
+      "node": "critic",
+      "iteration": 19,
+      "phase": "standard_retrieval",
+      "started_at": 1788887780.5974872,
+      "tokens": 32171,
+      "duration_s": 99.794
+    },
+    {
+      "node": "architect",
+      "iteration": 20,
+      "phase": "standard_retrieval",
+      "started_at": 1788887880.3962076,
+      "tokens": 46194,
+      "duration_s": 135.497
+    },
+    {
+      "node": "developer",
+      "iteration": 20,
+      "phase": "standard_retrieval",
+      "started_at": 1788888015.8959134,
+      "turns": 52,
+      "tokens": 1076116,
+      "workspace_from": "iter_19",
+      "rolled_back": false,
+      "lineage_reason": "",
+      "retries": 1,
+      "transport_failures": 0,
+      "gates_green": true,
+      "gate_status": {
+        "compile_ok": "passed",
+        "tests_ok": "passed",
+        "migration_ok": "passed"
+      },
+      "files_changed": 1,
+      "duration_s": 218.693
+    },
+    {
+      "node": "eval_dispatch",
+      "iteration": 20,
+      "phase": "standard_retrieval",
+      "started_at": 1788888234.590474,
+      "stage": "dev",
+      "n_checkpoints": 50,
+      "n_shards": 5,
+      "duration_s": 0.019
+    },
+    {
+      "node": "eval_collect",
+      "iteration": 20,
+      "phase": "standard_retrieval",
+      "started_at": 1788888293.2921777,
+      "stage": "dev",
+      "n_predictions": 50,
+      "n_failed_shards": 0,
+      "n_render_degraded": 0,
+      "render_degraded": false,
+      "duration_s": 0.008
+    },
+    {
+      "node": "judge",
+      "iteration": 20,
+      "phase": "standard_retrieval",
+      "started_at": 1788888293.3017898,
+      "stage": "dev",
+      "tokens": 22084,
+      "mgs": 0.588235294117647,
+      "verdict_vs_best": "tied",
+      "duration_s": 10.573
+    },
+    {
+      "node": "critic",
+      "iteration": 20,
+      "phase": "standard_retrieval",
+      "started_at": 1788888303.880096,
+      "tokens": 31659,
+      "duration_s": 99.003
+    },
+    {
+      "node": "finalize",
+      "iteration": 20,
+      "phase": "standard_retrieval",
+      "started_at": 1788888402.888053,
+      "halt_reason": "iteration budget exhausted after 20; best MGS=0.5882 (iteration 11), final MGS=0.5882",
+      "best_mgs": 0.588235,
+      "best_iteration": 11,
+      "duration_s": 0.001
+    }
+  ]
+}

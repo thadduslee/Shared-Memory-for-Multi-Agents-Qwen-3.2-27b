@@ -47,12 +47,19 @@ python -m pytest -q                             # unit + integration tests
 > LangGraph pulls its own, and resolving both in one environment is a fight you
 > do not need to have.
 
-Artifacts land in `runs/iter_{n}/`:
+Artifacts land in `runs/iter_{n}/`, plus one file for the run as a whole:
 
 ```
+runs/
+  critique_summary.md          the ARCHITECT's notebook: one capped line per
+                               iteration, appended at the START of the NEXT
+                               iteration, once, after that turn's design is
+                               written. The run's whole history in one file.
 runs/iter_1/
   design.md                    design.json           migration.sql
   critique.md                  attribution.json      judge_report.json
+                               critique.md is iteration 1's critique and nothing
+                               else -- the history lives in the notebook above
   developer_scratchpad.json    codebase_delta.txt
   developer_failure.json       written only when the build failed; what the
                                next Architect is shown as a critique
@@ -72,25 +79,26 @@ runs/iter_1/
 
 ```
 START → architect → developer(self-driving) → eval_dispatch ⇉ eval_worker×N ⇉ eval_collect
-                                                     ↑                              │
-                                     (scale_up: dev→full) ────── judge ─────────────┘
-                                                                  │
-                                              critic ← ───────────┘
-                                                │
-                          curriculum → architect │ finalize → END
+                        ↑        │                   ↑                              │
+                 infra_retry ← ──┘   (scale_up: dev→full) ────── judge ─────────────┘
+              (transport failure:                                 │
+               re-run, don't redesign)     critic ← ──────────────┘
+                                             │
+                       curriculum → architect │ finalize → END
 ```
 
 A full ASCII diagram with the failure edges is at the top of [`graph.py`](graph.py).
 
 | Node | What it owns | Privilege |
 |---|---|---|
-| `architect` | design doc, DDL, migration, Developer work order | web search only — **no file write, no shell** |
+| `architect` | design doc, DDL, migration, Developer work order, the run's recap | web search only — **no file write, no shell** |
 | `developer` | the implementation; its own build/run/fix loop over 10 real tools | the only node with a write surface |
 | `eval_dispatch` | domain filter, dev-slice selection, **field stripping**, sharding | — |
 | `eval_worker` | one shard: retrieve+sanitize (subprocess) → render (async) | read-only |
 | `eval_collect` | fan-in → one deterministic `predictions.jsonl` | — |
-| `judge` | U, A, F, MGS, gate decision | **the only node that reads annotations** |
-| `critic` | quantitative attribution → prioritized work list | read-only |
+| `judge` | U, A, F, MGS, gate decision, the score-history row | **the only node that reads annotations** |
+| `critic` | quantitative attribution + the regression verdict → prioritized work list | read-only |
+| `infra_retry` | charges one retry and re-runs the SAME iteration after a transport failure | — |
 
 ### The Developer runs its own loop
 
@@ -168,6 +176,63 @@ critique of the design:
 A green build writes `{}`, so a fixed problem never haunts the next design. Sized by
 `ARCHITECT_DEV_FAILURE_MAX_CHARS`; the gates, the recurrence warning and the instructions
 are reserved out of that budget, and the per-step excerpts are what falls off the end.
+
+### The loop remembers more than one iteration back — the Architect's notebook
+
+`state["critique"]` holds exactly **one** critique — the most recent — and `critique.md` is
+rewritten from scratch every iteration. So iteration 4's Architect saw iteration 3's
+diagnosis and had no record at all of what iterations 1 and 2 had already found and already
+tried. In `runs_test2`, iterations 1, 2 and 4 all blamed the same `sanitize_and_decide`
+branch ordering.
+
+The **Architect** keeps that record, in `runs/critique_summary.md`. It is the right node for
+the job because it is the only one that reads a critique and writes the design answering it
+in the same turn, so the summary comes back in the JSON block it already produces — no
+second model call, and no second reader to disagree about what the critique said. The Critic
+writes one iteration's `critique.md` and stops there.
+
+**The order inside an Architect turn is the design, not an implementation detail.**
+Iteration i+1 runs in four steps:
+
+1. read iteration i's `critique.md` (`state["critique"]` is that file verbatim);
+2. read `critique_summary.md` — the notebook of iterations **1..i-1**;
+3. write the design, the schema and the Developer's work order from the two of them;
+4. **only then** append a summary of iteration i's critique to `critique_summary.md`.
+
+Step 4 comes last so that the notebook a turn designs from is strictly the history *before*
+the critique in front of it. Fold step 4 into step 2 and iteration i arrives twice — once in
+full, once as a summary of itself — with nothing marking which of the two the design is
+supposed to be a response to.
+
+Four things about it are deliberate:
+
+* **The cap is per entry, not per file** (`ARCHITECT_CRITIQUE_RECAP_MAX_TOKENS`, default
+  100). One capped entry per iteration makes the growth linear — about 1k tokens across a
+  full `MAX_ITERATIONS=10` run. Capping the notebook as a whole would instead squeeze every
+  entry as the run went on, and the earliest iterations, whose lessons are the ones most
+  likely to have been forgotten, are exactly the ones that would be erased first.
+* **The file is appended to, never rewritten.** It is an audit trail of what each turn was
+  actually shown, and a rewrite from state could silently correct or drop a row an earlier
+  iteration had already designed against. `critique_digest` in macro-graph state carries the
+  same rows and is the structured mirror: it is what the once-per-iteration dedupe reads,
+  and what the notebook is rebuilt from if `RUNS_DIR` was wiped or repointed mid-run.
+* **What is summarised is the raw critique, never the notebook.** `state["critique"]` stays
+  the Critic's own text. Summarising the notebook instead would mean re-summarising the
+  previous summaries every iteration, and a summary of a summary is where a feedback loop
+  quietly stops carrying information.
+* **Every iteration appears exactly once.** Two consecutive failed builds leave the same
+  stale critique in state across three Architect turns, so the notebook dedupes on
+  `critique_iteration` — the stamp the Critic leaves saying which iteration its critique is
+  from. An iteration that never reached the Critic at all still gets a row, marked `build
+  failure` and derived deterministically from `dev_failure_report`: a gap in a numbered
+  history reads as a lost record rather than as the thing that actually happened.
+
+`previous_critique_summary` is asked for only when there is something to summarise, for the
+same reason `dev_failure_mitigations` is: a model asked to summarise a critique that does
+not exist writes one anyway, and iteration 1 would seed the notebook with fiction and carry
+it all run. The Architect does **not** write an account of what its own design changed
+against the previous one; the notebook of critiques is the whole of its historian's job.
+See [`nodes/_recap.py`](nodes/_recap.py).
 
 ### The Developer edits; it does not regenerate
 
@@ -290,6 +355,70 @@ AGENT_TRANSPORT=http python main.py --real --smoke
 `--smoke` and `--no-full` set `SKIP_FULL_STAGE`, which is checked *before* the gate — a good
 dev score cannot defeat the cost guard. The gate decision is still computed and recorded in
 `judge_report.json`, so you can see what would have happened without paying for it.
+
+### Where the run's artifacts go — `RUNS_DIR`
+
+`RUNS_DIR` picks the directory a run writes into, and is normally set per run so that
+runs do not overwrite each other:
+
+```bash
+RUNS_DIR=runs_real_100iter_v2 python main.py --real --max-iterations 100
+```
+
+**A relative value is fine.** `config.RUNS_DIR` resolves it against the cwd at import
+time, so everything downstream — `iteration_dir()`, `stage_dir()`, the Architect's
+notebook, and the `manifest_path` / `episodes_path` written into each shard spec — is
+absolute. This matters more than it looks: `_run_retrieval_shard` launches
+`_eval_runner.py` in a child process with `cwd=<iteration workspace>`, several
+directories below the project root. A relative path in the shard spec resolves against
+the *workspace* there and finds nothing.
+
+<details>
+<summary>What that used to look like, and why the log did not say so</summary>
+
+Before `RUNS_DIR` was resolved, `run-86c51cd90e1e` (`runs_real_100iter_v2`) failed like
+this, identically, on every iteration:
+
+```
+ERROR | orchestrator.evaluator | shard 0 failed: retrieval shard 0 produced no result
+ERROR | orchestrator.evaluator | circuit breaker TRIPPED: 3 shards failed with signature 4d10e01fe0e4a9e9
+INFO  | orchestrator.evaluator | collect iter=1 stage=dev: 0 predictions from 0/5 shards (5 failed, 0 skipped)
+ERROR | orchestrator.router    | fail-fast: circuit breaker: 3+ shards failed with signature 4d10e01fe0e4a9e9
+```
+
+The real cause was one line in the child, in `dev/shard_report.json` and nowhere else:
+
+```
+FileNotFoundError: [Errno 2] No such file or directory:
+    'runs_real_100iter_v2/iter_6/dev/checkpoints.stripped.jsonl'
+```
+
+`route_after_collect` then did exactly what it is supposed to do with a tripped breaker —
+refuse to score a build that was never tested and route back to the Architect — so each
+iteration paid for a full Architect design and a full Developer build and produced **no
+`judge_report.json`, no scoreboard row and no critique**. Seven iterations of that is
+about 2M tokens of a loop learning nothing, because every iteration was handed the same
+verdict for a reason that had nothing to do with the design.
+
+**Two independent guards now exist**, because either alone would have prevented this:
+
+1. `config.RUNS_DIR` is `.expanduser().resolve()`d at import, and `eval_dispatch_node`
+   resolves `manifest_path` / `episodes_path` again when it writes the shard spec.
+2. Shard failures are logged and reported **tail-first**. The old
+   `log.error(..., str(exc)[:200])` truncated from the front, which kept the
+   `produced no result` banner and cut the exception off mid-token at `sys.exit(ma`
+   — 231 log lines that named the symptom and never once the cause.
+   `_diagnosis()` now keeps the first *and* last line, and `_clip_keeping_tail()`
+   clips the middle out of the stored `error` field.
+
+`tests/test_runs_dir_resolution.py` pins all of it.
+
+</details>
+
+**If a run produces no `judge_report.json`, read `dev/shard_report.json` first.** The log
+line is a summary; the report holds each shard's full `trace`. A run that fail-fasts every
+iteration will show `n_failed == n_shards` and a non-null `circuit_breaker_signature`,
+and the traceback there names the actual fault.
 
 ### Reasoning models need a reasoning budget
 
@@ -427,9 +556,11 @@ failfast_signature             0.8026  every shard dies identically; the batch i
 curriculum_fail                0.7769  the active phase fails, halting the remaining phases
 budget_exhausted               0.5355  the token guard trips and populates halt_reason
 max_iterations                 0.7178  never converges; stops at MAX_ITERATIONS
+regression                     0.1190  MGS falls every round; the loop must roll back
 ```
 
-Each is asserted end-to-end through the real compiled graph in `tests/test_graph_paths.py`.
+Each is asserted end-to-end through the real compiled graph in `tests/test_graph_paths.py`
+(and, for `regression`, in `tests/test_regression_recovery_graph.py`).
 
 ---
 
@@ -450,6 +581,47 @@ value of fixing one term depends on the other two: at U=0.9, A=0.30, F=0.05, per
 +0.256 while perfecting F gains only +0.031. The Critic node computes the ranking in Python and
 hands the model a fact it is told not to re-derive.
 
+**…but that ranking is not a finding.** With `A` and `F` small, "perfect U" is the largest
+marginal gain almost regardless of the measurements, so the ranking names `U` on nearly every
+round. `run-8cf58d33b311` got `dominant=U` four times out of four while its MGS fell 0.3172 →
+0.1190, and the real story — *iteration 3's edit halved U; undo it* — was not expressible in the
+Critic's vocabulary at all. `scoreboard.term_deltas` asks the complementary question (which term
+*moved*, and what did that movement cost?) and is placed above the ranking in the prompt.
+
+**The lineage inherits the best code, not the last code.** `prepare_workspace` seeds iteration N
+from the highest-scoring iteration judged so far. On an improving run that is N−1, so the rule is
+invisible; on a regressing run it is a rollback, and an iteration whose build failed is not a
+candidate at all. Before this, a change that lost MGS became the permanent foundation of
+everything after it. See `docs/self_correction.md`.
+
+`ROLLBACK_TO_BEST=false` switches the lineage to strict linear N←N−1 instead. The best iteration
+is still tracked and still reported — `scoreboard.best_of`, and `best_mgs` / `best_iteration` in
+the run summary, do not consult the flag — it simply stops deciding what the next Developer
+inherits. The reason to want that is the failure mode rollback has of its own: a **tie** is not
+an improvement, so the champion never moves, and a plateaued run re-seeds every iteration from
+the same parent. `run-b5d7565ddb4a` is the worked example — iteration 4 reached MGS 0.5392, nine
+later iterations tied it, none beat it, and iterations 5 through 20 were each seeded from
+iteration 4. Fifteen independent one-patch attempts on one parent, accumulating nothing. The
+cost of switching is real: a regression becomes the permanent foundation of everything after it.
+
+A failed build is *not* inherited either way. `LINEAGE_SKIP_FAILED_BUILDS` (default on, and only
+consulted under linear lineage) seeds iteration N from the most recent iteration that actually
+built — 15 ← 13 when 14's build failed — because a workspace whose tests do not pass is not a
+foundation. In `run-b5d7565ddb4a`, iteration 14 ended `2 failed, 38 passed`; unconditional N−1
+would have handed that tree to iteration 15. The skip is about the **workspace**, not the
+**knowledge**: `dev_failure_report` and `dev_failure_history` are separate channels, so iteration
+15's Architect still gets the full failure report for 14, and is told in the trend table that its
+workspace is iteration 13's *because* 14 could not build — not because 14 scored worse, which it
+never did.
+
+**A gate that never ran is not a gate that failed.** The three mandatory gate booleans start
+`False` and are only ever set by their tool completing, so `tests_ok is False` is ambiguous
+between "the suite failed" and "`run_tests` was never called". The failure report renders those
+separately (`gates_failed` / `gates_never_ran`) and `classify_failure` labels the episode
+`design`, `infrastructure` or `inconclusive`. Only `infrastructure` re-runs the iteration —
+redesigning in answer to a network outage is how `run-8cf58d33b311` turned an eight-minute
+OpenRouter blip into the schema change that cost it 0.095 MGS.
+
 **Two thresholds, deliberately distinct.** `DEV_GATE_MGS = 0.80` is the *scale-up gate*;
 `MGS_TARGET = 0.85` is the *stop condition*. A system can be worth the full 579-checkpoint run
 well before it is finished. Terminating on the gate would stop the loop the moment it earned
@@ -462,6 +634,81 @@ crashes on the hard checkpoints outscores one that answers them badly.
 **The LLM judge may only make a verdict worse.** A leak flagged by either the rule pass or the
 model pass is a leak; utility is correct only if both agree. An LLM judge that could clear a
 leak the rules caught would let the system under test score by writing persuasive prose.
+
+---
+
+## 7a. Self-correction: keeping the best answer
+
+A self-improving loop needs one property that is easy to leave out and expensive to notice
+missing: **it must never build on top of a change it has already measured as worse.**
+
+`run-8cf58d33b311` did not have it. Five iterations, 4.9M tokens, MGS 0.3172 → 0.2222 → 0.1830 →
+0.1190 — every design predicting a rise, every measurement a fall, each iteration inheriting the
+one just measured as worse. It signed off with `"halt_reason": "iteration budget exhausted after
+5; best MGS=0.1190"`, which is the run's *worst* result reported as its best.
+
+Five mechanisms were missing at once. Now:
+
+* **`state.score_history`** — one row per judged `(iteration, stage)`, append-only. Before this,
+  the loop's only memory of quality was `mgs_score`, a scalar the Judge overwrote each round.
+* **`scoreboard.py`** — every derived question, as pure functions of that list: best-so-far, the
+  champion, the verdict against the best, the term-movement decomposition, the trend table, the
+  run summary. Everything derives; nothing is stored twice.
+* **The lineage inherits the champion.** `prepare_workspace(parent=…)` seeds iteration N from the
+  best iteration judged so far, not from N−1. Invisible on an improving run; a rollback on a
+  regressing one. A failed build has no score row and so can never be a parent. Set
+  `ROLLBACK_TO_BEST=false` for linear N←N−1 lineage, which still steps over a failed build
+  (`LINEAGE_SKIP_FAILED_BUILDS`) while forwarding its failure report. Best-so-far tracking is
+  unaffected by either flag.
+* **The Architect sees the trend**, with a delta column, a per-row verdict, a row for each failed
+  build saying why it has no numbers, and — after a rollback — an explicit instruction not to
+  write a work order reverting changes that are already gone.
+* **The Critic can say "revert"**, as a first-class verdict alongside `keep_and_fix` and
+  `not_the_cause`, driven by which term actually *moved* rather than by the marginal ranking
+  (which names `U` almost every round whatever happened).
+* **An outage is not a design failure.** `classify_failure` separates `design` (a gate ran and
+  failed) from `infrastructure` (the transport ate the episode) and `inconclusive` (no gate ever
+  ran). Only `infrastructure` re-runs the iteration; each carries its own framing into the
+  Architect's prompt.
+* **`halt_reason` reports the actual best**, alongside the final, and names the workspace worth
+  keeping.
+* **A dead answerer cannot produce a clean-looking score.** Render fallbacks are counted per
+  stage; a stage where most answers came from the retrieval layer rather than a model is marked
+  `render_degraded`, logged at ERROR, flagged in the judge report, excluded from champion
+  selection, and by default halts the run. `run-c993a6e93050` spent 3 hours and 12.5M tokens with
+  the vLLM evaluator unreachable — 0 of 357 answering predictions written by a model — and
+  reported `best MGS=0.8366` throughout.
+* **A two-minute rate limit does not end a 23-iteration run.** HTTP 402 is two errors sharing a
+  status code; the in-flight kind carries `Retry-After` and is now retried at the stated wait, and
+  a transport failure in the Architect retries the iteration instead of the whole run.
+* **The turn ceiling is not a cliff the model cannot see.** The Developer's status block carries
+  `turn=N/60` beside `retry=0/5`, and inside the last `DEVELOPER_LANDING_TURNS` it says plainly:
+  stop reading, run the gates, land what works. The first real run with the fixes lost two of
+  five iterations at turn 60 with every file written and no gate ever called — 76% and 87% of
+  those episodes were `read_file`. The Architect is told what the last work order cost in turns,
+  because work-order size is the lever that causes this.
+
+Watch all of it offline in about a minute:
+
+```bash
+python main.py --scenario regression --max-iterations 4   # scripts that run's real scores
+python check_learning.py runs_real5_notebook              # four FAILs on the archived run
+```
+
+And measure any workspace without spending a run — the action-shape half of `U` is fully
+determined by the evaluator's phase 1, which needs no model:
+
+```bash
+python bench_template.py templates
+python bench_template.py templates --compare runs_real5_notebook/iter_5/workspace
+```
+
+Three seconds, zero tokens. That is the half `run-8cf58d33b311` spent 4.9M tokens losing.
+
+The full account, including the artifact-side gate-ordering bug the loop was chasing (relevance
+was checked *after* the RBAC gates, so an irrelevant denial downgraded complete correct answers
+to `answer_redacted` — 12 of 18 utility checkpoints on the dev slice, 58 of 210 on the full set)
+is in [`docs/self_correction.md`](docs/self_correction.md).
 
 ---
 
@@ -513,11 +760,19 @@ nodes/dev_tools.py         10 real tools (compile, pytest, sqlite, patch, smoke 
 nodes/medical_evaluator.py Send fan-out, circuit breaker, fan-in collector
 nodes/judge.py             rule-based + LLM scoring, U/A/F/MGS, the dev gate
 nodes/critic.py            marginal-contribution attribution
+nodes/_recap.py            the running recap: capping, dedupe, rendering
 routers.py                 every conditional edge, as a named pure function
 graph.py                   macro-graph assembly + ASCII topology
+scoreboard.py              score history, the champion, regression verdicts
+bench_template.py          offline U/A/F/MGS for any workspace — no model, 3 seconds
 templates/                 the seed memory system the Developer writes on iteration 1
 mocks/                     dataset, LLM, dsh responses, sandbox, scripted scenarios
-tests/                     330 tests: routing, graph paths, the Developer's loop,
-                           field wall, real-data contracts
+tests/                     609 tests: routing, graph paths, the Developer's loop,
+                           the running recap, field wall, real-data contracts,
+                           self-correction (rollback, regression verdicts, failure
+                           classification), and the template's measured baseline
+docs/self_correction.md    why the loop used to walk away from its own best answer
 main.py                    entrypoint
+check_learning.py          grades a finished run: is the loop actually learning?
+inspect_run.py             per-iteration digest of what all five nodes produced
 ```

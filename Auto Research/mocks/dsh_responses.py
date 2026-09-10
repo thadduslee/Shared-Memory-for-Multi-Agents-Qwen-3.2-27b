@@ -210,7 +210,12 @@ def _architect_response(task: str) -> tuple[str, bool]:
         if re.search(rf"dominant[_ ]?(?:failing[_ ]?)?(?:metric|term)\W+{term}\b", task):
             blamed = term
             break
-    has_critique = "CRITIQUE" in task
+    # Keyed on the actual heading rather than on the substring "CRITIQUE",
+    # which now also appears in the recap of earlier iterations -- a block that
+    # is present on a failed-build iteration where there is no fresh critique at
+    # all, and which would otherwise make the mock propose a targeted migration
+    # in response to feedback it had not been given.
+    has_critique = "## CRITIQUE FROM THE PREVIOUS ITERATION" in task
     migration = _TARGETED_MIGRATIONS[blamed] if has_critique else _BASE_MIGRATION
     schema_ddl = (TEMPLATES / "memory_system" / "schema.sql").read_text(encoding="utf-8")
 
@@ -251,6 +256,18 @@ def _architect_response(task: str) -> tuple[str, bool]:
             "positive as long as F drops by more than U does in relative terms."
         ),
     }
+    # The notebook key. Supplied when the TASK ASKS FOR IT rather than on a
+    # condition of the mock's own -- it is conditional in nodes/architect.py, and
+    # a mock that decided for itself when to answer would drift from the node it
+    # stands in for the first time that condition changed.
+    if "`previous_critique_summary`" in task:
+        payload["previous_critique_summary"] = (
+            f"The Critic attributed the loss to {blamed} and traced it to the retrieval "
+            f"path, citing the failing checkpoints as evidence. It asked for a schema "
+            f"change rather than a prompt change, on the grounds that the failure is a "
+            f"lookup-visibility problem and not a wording one."
+        )
+
     prose = (
         "# Design: SQL-backed multi-principal medical memory\n\n"
         "## Prior art surveyed\n"

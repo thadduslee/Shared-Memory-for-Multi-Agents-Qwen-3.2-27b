@@ -1,0 +1,10 @@
+workspace: /home/thaddus/Auto Research/runs_real_100iter_v4/iter_19/workspace
+  memory_system/__init__.py  341 chars, 8 lines
+  memory_system/agent.py  23553 chars, 471 lines
+  memory_system/schema.sql  9373 chars, 180 lines
+  memory_system/store.py  83129 chars, 1698 lines
+  tests/test_action_shape.py  13436 chars, 303 lines
+  tests/test_deletion_scope.py  7328 chars, 163 lines
+  tests/test_forgetting.py  5305 chars, 112 lines
+  tests/test_rbac.py  6249 chars, 150 lines
+  tests/test_utility_focus.py  19120 chars, 424 lines

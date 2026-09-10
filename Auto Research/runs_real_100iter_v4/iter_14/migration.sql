@@ -1,0 +1,1 @@
+-- no schema change: EMPTY migration string. The store stays on SCHEMA_VERSION 5.

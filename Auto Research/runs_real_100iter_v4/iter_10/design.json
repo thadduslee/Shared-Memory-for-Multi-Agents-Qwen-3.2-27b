@@ -1,0 +1,23 @@
+{
+  "targets_metric": "U",
+  "expected_tradeoff": "Targets U: recovers the -0.1667 regression from iteration 9 by restoring the three cap-induced no_memory checkpoints to answered, returning U to 0.6111 and MGS toward the best 0.5752 (a tie, not a beat). Cost to A: expected to return to its historical best-iteration value 0.0588 (every cap-16 iteration measured A=0.0588; iteration 9's A=0.0000 came with the failed cap and buys nothing once U collapses). Cost to F: none; F has been 0.0000 on every iteration and the forgetting path is untouched. Net: restores the best-known platform and adds the census evidence needed to fix the seven remaining content-missing checkpoints without another blind widening.",
+  "retrieval_loop": "Unchanged structure: PASS-1 ranked gate-0 scan (real-content overlap first) -> PASS-2 RBAC/scope/tombstone gates in ranked order with top_k enforced only on the allowed list. Behavioural change: the stop value the caller passes is back to 16. With the cap at 16 the loop never evaluates tombstoned candidates ranked beyond the 16th allowed record, so the three iter-9 benign checkpoints that flipped to no_memory are answered again. New: an inert candidate_census (top-24 ranked candidates' content/total overlap + record_id) is attached to the Decision after the lists are final, for iteration-11 diagnostics; nothing downstream reads it.",
+  "forgetting_mechanism": "Unchanged and measured perfect (F=0 across the whole run). Tombstone-first gate ordering, tombstone_terms scoped responsiveness, record_terms purge in the same transaction as the tombstone, in-place body erase for plaintext, and key/ciphertext shredding for confidential content all stay exactly as-is. No forgetting edit is proposed.",
+  "work_order": [
+    "REVERT (named edit): in memory_system/agent.py GateMemAgent.__init__, change the keyword default top_k from 64 back to 16 and delete the comment block that justified the 64 raise, replacing it with a one-line warning that raising re-evaluates tombstones ranked 16-64 and flips clean answers to no_memory (iter-9 regression; do not raise).",
+    "memory_system/store.py retrieve() docstring: reword the two sentences that describe the caller default as 64 to say the default is 16 again (doc-only, no behaviour).",
+    "memory_system/store.py retrieve(): after the PASS-2 gates fill the decision, attach an inert diagnostic field decision.candidate_census = [{'record_id': rid, 'content_overlap': c, 'total_overlap': t} for the top-24 ranked candidates], written after the allowed/denied lists are final so it can never branch the decision or the action; do not surface it in the agent's debug/answer.",
+    "Run the local test gate (run_tests) and the smoke runner to confirm the action/answer/leak invariants still hold with top_k=16 and the inert census attached.",
+    "Do NOT touch sanitize_and_decide, _logistics_suffix, gate order, query_answer_denials, RBAC grants, tombstones/shredding, or any SQL; each is a measured non-mover or regression this iteration."
+  ],
+  "prior_art": [],
+  "dev_failure_mitigations": null,
+  "responds_to_dev_failure": null,
+  "critique_recap_added": [
+    {
+      "iteration": 9,
+      "kind": "critique",
+      "summary": "Dominant failing term U (perfecting it was worth +0.5556 MGS), traced to retrieval hard cap (top_k) in GateMemAgent.__init__. Observed mechanisms: answered_but_content_missing, evidence_withheld. 3 proposal(s) were made."
+    }
+  ]
+}

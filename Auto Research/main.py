@@ -29,6 +29,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import config  # noqa: E402
+import scoreboard  # noqa: E402
 from nodes._common import setup_logging, write_artifact  # noqa: E402
 from state import initial_state  # noqa: E402
 
@@ -206,6 +207,16 @@ async def preflight() -> int:
 
     print("=" * 78)
     print("PREFLIGHT PASSED" if ok else "PREFLIGHT FAILED -- fix the above before a real run")
+    if ok:
+        # A POINT-IN-TIME CHECK, and worth saying so. run-c993a6e93050 passed
+        # this and then lost its evaluator an hour in: 7,496 ConnectErrors,
+        # every render falling back to raw evidence, and 23 iterations scored
+        # against it. The in-run detection is what covers that (see
+        # `render_degraded` in nodes/medical_evaluator.py); this line is here so
+        # nobody reads a green preflight as a guarantee about the next 3 hours.
+        print("  note: this is a snapshot. An endpoint that dies mid-run is caught by the")
+        print("        evaluator's own degradation check, which halts rather than scoring")
+        print("        answers the model never wrote (HALT_ON_DEGRADED_EVAL).")
     print("=" * 78 + "\n")
     return 0 if ok else 1
 
@@ -251,12 +262,30 @@ async def run(args: argparse.Namespace) -> int:
         "iterations": final.get("iteration_count", 0),
         "halt_reason": final.get("halt_reason"),
         "final_curriculum_phase": final.get("current_curriculum_phase"),
+        # THE LAST ITERATION'S NUMBERS. Read them beside `scoreboard` below,
+        # not instead of it: on a run that regressed these describe the WORST
+        # code the run produced, because they describe the most recent code.
+        "final_metrics": {
+            "U_utility_accuracy": final.get("utility_score"),
+            "A_privacy_leakage_rate": final.get("access_violation_rate"),
+            "F_deletion_leakage_rate": final.get("forgetting_failure_rate"),
+            "MGS_compliance_utility_score": final.get("mgs_score"),
+        },
+        # Retained under the old key so anything that parsed these summaries
+        # before still finds them; `final_metrics` is the honest name.
         "metrics": {
             "U_utility_accuracy": final.get("utility_score"),
             "A_privacy_leakage_rate": final.get("access_violation_rate"),
             "F_deletion_leakage_rate": final.get("forgetting_failure_rate"),
             "MGS_compliance_utility_score": final.get("mgs_score"),
         },
+        # THE WHOLE TRAJECTORY, and which iteration actually won. A run summary
+        # that reports only the final measurement cannot distinguish a loop that
+        # improved for five iterations from one that collapsed for five, and
+        # run-8cf58d33b311 -- 0.3172 -> 0.2222 -> 0.1830 -> 0.1190 -- looked
+        # exactly like a successful run in its own summary file. `best_iteration`
+        # is also the answer to "which workspace should I actually ship?".
+        "scoreboard": scoreboard.summary(final),
         # Named for what it is. `dev_set_pass_rate` read like a score on the
         # benchmark's dev set; it is the Developer's own unit-test suite in its
         # own workspace, and runs_4iter reported it as 1.0 directly above an MGS
@@ -275,6 +304,12 @@ async def run(args: argparse.Namespace) -> int:
         # evaluations; one with three entries spent it on designs that could not
         # be built, and the two need telling apart without reading every log.
         "dev_failure_history": final.get("dev_failure_history", []),
+        # The run's own narrative: one capped line per iteration, written by the
+        # Architect that read that iteration's critique. This is the structured
+        # mirror of `runs/critique_summary.md`, the notebook the Architect keeps.
+        # Reading it beside `metrics` is how you tell a run that diagnosed three
+        # different things from one that diagnosed the same thing three times.
+        "critique_digest": final.get("critique_digest", []),
         "token_usage": final.get("token_usage"),
         "node_timings": final.get("node_timings", []),
     }
@@ -283,6 +318,24 @@ async def run(args: argparse.Namespace) -> int:
     print("\n" + "=" * 78)
     print(json.dumps({k: v for k, v in summary.items() if k != "node_timings"}, indent=2, default=str))
     print("=" * 78)
+    # THE ONE LINE A HUMAN ACTUALLY READS. A run that ended below its own best
+    # must not be able to scroll past looking like every other run: the final
+    # workspace is not the one worth keeping, and which one IS worth keeping is
+    # a question the summary can answer in a sentence.
+    board = summary["scoreboard"]
+    if board["regressed_from_best"]:
+        print(
+            f"!! THIS RUN REGRESSED. Best MGS={board['best_mgs']:.4f} at iteration "
+            f"{board['best_iteration']}; the run ended at {board['final_mgs']:.4f} "
+            f"(iteration {board['final_iteration']}).\n"
+            f"   The code worth keeping is "
+            f"{config.iteration_dir(board['best_iteration']) / 'workspace'}"
+        )
+    elif board["best_iteration"]:
+        print(f"best MGS={board['best_mgs']:.4f} at iteration {board['best_iteration']} "
+              f"(also the final iteration)"
+              if board["best_iteration"] == board["final_iteration"]
+              else f"best MGS={board['best_mgs']:.4f} at iteration {board['best_iteration']}")
     print(f"artifacts: {config.RUNS_DIR}")
 
     reason = str(final.get("halt_reason") or "")

@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS idx_access_log_denial_lookup ON access_log(requester_id, decision, record_id); -- Accelerates per-requester denial auditing and per-checkpoint denial citation (query path: access_log WHERE requester_id=? AND decision IN (...)). SCHEMA_VERSION in store.py must be bumped to 3 alongside.

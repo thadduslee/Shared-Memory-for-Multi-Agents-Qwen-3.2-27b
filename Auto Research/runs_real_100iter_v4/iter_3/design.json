@@ -1,0 +1,21 @@
+{
+  "targets_metric": "U",
+  "expected_tradeoff": "A and F are mathematically untouched: the change never alters which records are released, denied, logged, or shredded, so it cannot affect leakage rates. U is expected to rise by the two checkpoints (005/ckpt_04, 010/ckpt_04) whose answers already contain every required string but were scored zero because the label said answer_redacted. If the mechanism description is wrong, U will stay flat; this gives the loop a falsifiable read on whether the dead-field hypothesis is correct before any more expensive ranking change is attempted.",
+  "retrieval_loop": "Unchanged. MemoryStore.retrieve() already gates responsiveness before tombstone/RBAC/scope, ranks by (content_overlap, structural, seq), and hard-caps allowed at top_k. The fault under repair is not in retrieval; it is in how the resulting Decision is mapped to the action label.",
+  "forgetting_mechanism": "Unchanged. tombstone() purges record_terms and overwrites plaintext in the same transaction; confidential rows are crypto-shredded by NULLing key_material and zeroing ciphertext.",
+  "work_order": [
+    "Edit memory_system/agent.py, function sanitize_and_decide, branch 3. Replace `withheld = len(decision.denied_rbac) + len(decision.denied_scope)` with `qad = decision.query_answer_denials; withheld = qad if qad is not None else len(decision.denied_rbac) + len(decision.denied_scope)`. Keep the existing branch structure and rationale strings exactly as they are; the fallback path guarantees the three pinned `answer_redacted` tests still pass because hand-built Decisions leave `query_answer_denials` as None.",
+    "Run compile_check and confirm the package imports cleanly.",
+    "Run the local test suite (`run_tests`) and confirm all deterministic tests in test_action_shape.py, test_rbac.py, test_forgetting.py, test_deletion_scope.py, and test_utility_focus.py still pass."
+  ],
+  "prior_art": [],
+  "dev_failure_mitigations": null,
+  "responds_to_dev_failure": null,
+  "critique_recap_added": [
+    {
+      "iteration": 2,
+      "kind": "critique",
+      "summary": "The prior critique found U alone losing, with A and F both perfect, and blamed the tie not on a regression but on a dead fix: Decision.query_answer_denials is computed by store.py yet never read by sanitize_and_decide in agent.py, which still keys answer_redacted on the raw length of the RBAC/scope denial lists. It asked for that field to be consumed so incidental contact/digit-only denials ..."
+    }
+  ]
+}

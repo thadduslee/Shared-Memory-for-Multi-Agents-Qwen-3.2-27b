@@ -1,0 +1,75 @@
+{
+  "current_mgs": 0.588235,
+  "mgs_if_perfect": {
+    "U": 0.882353,
+    "A": 0.666667,
+    "F": 0.588235
+  },
+  "marginal": {
+    "U": 0.294118,
+    "A": 0.078431,
+    "F": 0.0
+  },
+  "ranked": [
+    "U",
+    "A",
+    "F"
+  ],
+  "dominant_term": "U",
+  "dominant_gain": 0.294118,
+  "raw": {
+    "U": 0.6666666666666666,
+    "A": 0.11764705882352941,
+    "F": 0.0
+  },
+  "regression": {},
+  "verdict_vs_best": "improved",
+  "component": "retrieval allowed-list ranked cap (top_k=16) in MemoryStore.retrieve / GateMemAgent.__init__",
+  "proposals": [
+    {
+      "component": "GateMemAgent.__init__ (agent.py) top_k default",
+      "kind": "design",
+      "change": "Raise top_k from 16 to 40, keeping the ranked hard-stop semantics on allowed (do not remove the stop). Regression legs are defused by the existing marginal query_answer_denials accounting and the deferred-tombstone query-centred coverage skip in MemoryStore.retrieve.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ]
+    },
+    {
+      "component": "candidate_census observability (retrieve/query debug)",
+      "kind": "design",
+      "change": "Read the serialized candidate_census for ckpt_04 next round to observe the denied record's rank and digests before designing any marginal-accounting change; do not guess at it this round.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04"
+      ]
+    }
+  ],
+  "observed_mechanisms": [
+    "answered_but_content_missing"
+  ],
+  "mechanisms": [
+    {
+      "name": "answered_but_content_missing",
+      "component": "allowed-list top_k ranked truncation before answer assembly",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ]
+    }
+  ],
+  "evidence_checkpoint_ids": [
+    "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+    "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+    "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+    "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+    "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+  ]
+}

@@ -98,12 +98,36 @@ def test_the_contract_survives_a_budget_too_small_for_the_implementation(
 ) -> None:
     """The exact regression: squeeze the budget, tests must still be there.
 
-    Under alphabetical order this assertion fails -- store.py eats the budget.
+    Under plain alphabetical order this fails -- `memory_system/store.py` sorts
+    ahead of `tests/` and is 31k characters on its own, so the assertions that
+    bind the design would be the first thing dropped and the Architect would be
+    left redesigning an API whose contract it cannot see.
+
+    THE BUDGET HERE IS DERIVED, NOT A LITERAL. A hard-coded number stops testing
+    the property the moment `templates/tests/` grows: a budget that used to sit
+    between "all the tests" and "the whole baseline" silently slides below the
+    tests themselves, and the assertion then fails for a reason that has nothing
+    to do with the ordering it exists to check. Ask the directory instead.
     """
-    monkeypatch.setattr("nodes.architect.CODE_VIEW_MAX_CHARS", 14_000)
+    tests_size = sum(path.stat().st_size
+                     for path in (config.TEMPLATES_DIR / "tests").glob("*.py"))
+    total = sum(path.stat().st_size for path in config.TEMPLATES_DIR.rglob("*")
+                if path.is_file() and path.suffix in {".py", ".sql"}
+                and "__pycache__" not in path.parts)
+    # Room for every test file and its header lines, and nowhere near enough for
+    # the implementation -- which is the situation the ordering exists for.
+    budget = tests_size + 2_000
+    assert budget < total, "templates/ must be bigger than its own tests"
+
+    monkeypatch.setattr("nodes.architect.CODE_VIEW_MAX_CHARS", budget)
     view = _read_only_codebase_view(missing_workspace)
-    assert "def test_unassigned_clinician_is_denied" in view
+    for symbol in ("def test_unassigned_clinician_is_denied",
+                   "def test_deletion_request_creates_tombstone"):
+        assert symbol in view, symbol
     assert "[... code view truncated ...]" in view
+    # ...and it is the IMPLEMENTATION that was dropped, which is the half of the
+    # property a "tests are present" assertion alone would not catch.
+    assert "_xor_stream" not in view
 
 
 # ----------------------------------------------------------------------

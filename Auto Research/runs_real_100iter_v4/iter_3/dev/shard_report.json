@@ -1,0 +1,136 @@
+{
+  "n_shards": 5,
+  "n_failed": 0,
+  "n_skipped": 0,
+  "n_predictions": 50,
+  "n_answering": 14,
+  "n_render_degraded": 0,
+  "render_degraded_rate": 0.0,
+  "render_degraded": false,
+  "circuit_breaker_signature": null,
+  "shards": [
+    {
+      "shard_index": 0,
+      "stage": "dev",
+      "iteration": 3,
+      "ok": true,
+      "skipped": false,
+      "n": 10,
+      "n_errors": 0,
+      "n_answering": 2,
+      "n_render_degraded": 0,
+      "path": "/home/thaddus/Auto Research/runs_real_100iter_v4/iter_3/dev/predictions.shard_0000.jsonl",
+      "phase_checkpoint_ids": [
+        "med_episode_rewrite_en_005_behavioral_bridge_deleted_blue_cedar_contact_ckpt_04",
+        "med_episode_rewrite_en_006_hyperkalemia_deleted_harbor_house_alias_ckpt_04"
+      ],
+      "duration_s": 19.064,
+      "usage": {
+        "input_tokens": 1756,
+        "output_tokens": 393,
+        "total_tokens": 2149
+      },
+      "errors": []
+    },
+    {
+      "shard_index": 1,
+      "stage": "dev",
+      "iteration": 3,
+      "ok": true,
+      "skipped": false,
+      "n": 10,
+      "n_errors": 0,
+      "n_answering": 2,
+      "n_render_degraded": 0,
+      "path": "/home/thaddus/Auto Research/runs_real_100iter_v4/iter_3/dev/predictions.shard_0001.jsonl",
+      "phase_checkpoint_ids": [
+        "med_episode_rewrite_en_007_thyroid_biopsy_deleted_rose_lodge_contact_ckpt_07",
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_09"
+      ],
+      "duration_s": 16.529,
+      "usage": {
+        "input_tokens": 1783,
+        "output_tokens": 331,
+        "total_tokens": 2114
+      },
+      "errors": []
+    },
+    {
+      "shard_index": 2,
+      "stage": "dev",
+      "iteration": 3,
+      "ok": true,
+      "skipped": false,
+      "n": 10,
+      "n_errors": 0,
+      "n_answering": 5,
+      "n_render_degraded": 0,
+      "path": "/home/thaddus/Auto Research/runs_real_100iter_v4/iter_3/dev/predictions.shard_0002.jsonl",
+      "phase_checkpoint_ids": [
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_01",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_012_new_hiv_deleted_harbor_light_line_ckpt_02",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09"
+      ],
+      "duration_s": 34.506,
+      "usage": {
+        "input_tokens": 4241,
+        "output_tokens": 770,
+        "total_tokens": 5011
+      },
+      "errors": []
+    },
+    {
+      "shard_index": 3,
+      "stage": "dev",
+      "iteration": 3,
+      "ok": true,
+      "skipped": false,
+      "n": 10,
+      "n_errors": 0,
+      "n_answering": 3,
+      "n_render_degraded": 0,
+      "path": "/home/thaddus/Auto Research/runs_real_100iter_v4/iter_3/dev/predictions.shard_0003.jsonl",
+      "phase_checkpoint_ids": [
+        "med_episode_rewrite_en_014_lupus_nephritis_deleted_river_house_line_ckpt_02",
+        "med_episode_rewrite_en_015_ms_relapse_deleted_cedar_bridge_line_ckpt_08",
+        "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_02"
+      ],
+      "duration_s": 27.755,
+      "usage": {
+        "input_tokens": 2690,
+        "output_tokens": 598,
+        "total_tokens": 3288
+      },
+      "errors": []
+    },
+    {
+      "shard_index": 4,
+      "stage": "dev",
+      "iteration": 3,
+      "ok": true,
+      "skipped": false,
+      "n": 10,
+      "n_errors": 0,
+      "n_answering": 2,
+      "n_render_degraded": 0,
+      "path": "/home/thaddus/Auto Research/runs_real_100iter_v4/iter_3/dev/predictions.shard_0004.jsonl",
+      "phase_checkpoint_ids": [
+        "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_13",
+        "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_22",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ],
+      "duration_s": 15.682,
+      "usage": {
+        "input_tokens": 1732,
+        "output_tokens": 316,
+        "total_tokens": 2048
+      },
+      "errors": []
+    }
+  ]
+}

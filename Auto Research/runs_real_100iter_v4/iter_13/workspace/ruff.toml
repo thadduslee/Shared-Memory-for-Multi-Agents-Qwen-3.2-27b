@@ -1,0 +1,29 @@
+# Lint configuration for the memory system the Developer builds.
+#
+# Pinned explicitly rather than relying on ruff's defaults, so that "the linter
+# is green" means the same thing across ruff versions and across machines --
+# otherwise the Developer's exit evidence changes when someone upgrades a tool.
+line-length = 100
+target-version = "py310"
+
+# The orchestrator writes these two scaffolds into the workspace to drive the
+# smoke test and the evaluation shards. They are harness code, not the
+# Developer's artifact, and flagging them produces findings the Developer has no
+# way to act on.
+exclude = ["_smoke_runner.py", "_eval_runner.py"]
+
+[lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes: undefined names, unused imports, dead locals
+    "B",    # bugbear: mutable defaults, loop-variable capture
+    "S608", # hardcoded SQL injection -- worth catching in a store that builds SQL
+]
+ignore = [
+    "E501",  # line length is enforced by the formatter, not the linter
+    "B008",  # function call in default arg: fine for the dataclass factories here
+]
+
+[lint.per-file-ignores]
+# Tests legitimately reach into private helpers to prove shredding really shreds.
+"tests/*" = ["S101", "SLF001"]

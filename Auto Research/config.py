@@ -328,6 +328,16 @@ HTTP_MAX_RETRIES: int = _env_int("HTTP_MAX_RETRIES", 4)
 HTTP_BACKOFF_BASE_S: float = _env_float("HTTP_BACKOFF_BASE_S", 0.75)
 HTTP_BACKOFF_MAX_S: float = _env_float("HTTP_BACKOFF_MAX_S", 30.0)
 
+# The ceiling for a `Retry-After` the provider states explicitly, as opposed to
+# a backoff we invented. Separate from HTTP_BACKOFF_MAX_S because the two answer
+# different questions: that one is "how long should WE guess", this one is "how
+# long is the provider willing to tell us to wait before we give up on it".
+#
+# OpenRouter's in-flight 402 says `Retry-After: 120`; clamping that to the 30s
+# guess-ceiling meant every retry arrived while the same requests were still in
+# flight. See `llm/client._is_transient_payment_required`.
+HTTP_RETRY_AFTER_MAX_S: float = _env_float("HTTP_RETRY_AFTER_MAX_S", 180.0)
+
 
 # ==========================================================================
 # 5. GateMem dataset  (brief section 6.3)
@@ -378,6 +388,114 @@ MAX_ITERATIONS: int = _env_int("MAX_ITERATIONS", 10)
 # together with a tiny dev slice; leave it False for real research runs.
 SKIP_FULL_STAGE: bool = _env_bool("SKIP_FULL_STAGE", False)
 MAX_DEV_RETRIES: int = _env_int("MAX_DEV_RETRIES", 5)
+
+# ---- Self-correction: never build on top of a measured regression ----
+#
+# WHY THESE EXIST. Before them, `prepare_workspace` seeded iteration N from
+# iteration N-1 unconditionally, so the loop's lineage followed the LAST code
+# rather than the BEST code and could only ever drift away from its own high
+# water mark. run-8cf58d33b311 went 0.3172 -> 0.2222 -> 0.1830 -> 0.1190 doing
+# exactly that, and reported `best MGS=0.1190` at the end. See scoreboard.py.
+#
+# ROLLBACK_TO_BEST=False restores the old unconditional N-1 lineage. It is a
+# knob rather than a deleted branch because "always inherit the previous
+# iteration" is a legitimate experiment -- it is just not a safe default.
+ROLLBACK_TO_BEST: bool = _env_bool("ROLLBACK_TO_BEST", True)
+
+# ---- Linear lineage: may a FAILED build be a parent? ----
+#
+# Only consulted when ROLLBACK_TO_BEST is False. Under the champion rule the
+# question cannot arise -- an iteration that never reached the Judge has no
+# score row, so it is not a champion candidate and can never be inherited.
+# Strict N-1 lineage has no such protection: iteration 14 of run-b5d7565ddb4a
+# ended `2 failed, 38 passed` and was never judged, and unconditional N-1 would
+# have handed that broken tree to iteration 15 as its foundation.
+#
+# True (the default) seeds iteration N from the most recent iteration that
+# actually BUILT and was judged -- 15 <- 13 when 14 failed -- so the lineage
+# still compounds but never compounds onto a tree whose tests do not pass. The
+# failed iteration is skipped as a PARENT only; everything it taught the loop
+# still flows forward, because `dev_failure_report` and `dev_failure_history`
+# are separate channels from the workspace and the Architect reads both. It is
+# told, in `trend_table`, that this is why its workspace is not N-1's.
+#
+# False restores genuinely unconditional N-1 lineage, broken parents included.
+# There is no good reason to want it outside of reproducing an old run.
+LINEAGE_SKIP_FAILED_BUILDS: bool = _env_bool("LINEAGE_SKIP_FAILED_BUILDS", True)
+
+# ---- The Developer's per-episode turn ceiling, and the landing window ----
+#
+# DEVELOPER_MAX_TURNS bounds one episode's model turns. MAX_DEV_RETRIES only
+# counts FAILED observations, so an episode making slow *green* progress --
+# read, read, list, read -- is bounded by nothing else except the wall clock.
+#
+# DEVELOPER_LANDING_TURNS is how many turns before that ceiling the loop starts
+# telling the model to STOP EDITING AND RUN THE GATES.
+#
+# WHY THE SECOND ONE EXISTS. The ceiling used to be a cliff the model could not
+# see: the status block reported `retry=0/5` and said nothing at all about
+# turns, so an episode could arrive at turn 59 with every file written and no
+# idea it was about to be cut off. That is not hypothetical -- it is how
+# run-b3275eb7e373 lost two of its five iterations:
+#
+#   iteration 3: 70 steps, 53 of them `read_file`, all three source files
+#                written, ZERO gate tools ever called.
+#   iteration 5: 69 steps, 60 of them `read_file`, `run_tests` green at
+#                pass_rate 1.0, and `compile_check` and `sql_exec` never run.
+#
+# Both were two tool calls from a green build. An episode that ends without
+# running its gates scores nothing at all and the work it wrote is discarded,
+# so the cheapest possible intervention -- telling the model how many turns it
+# has left, and when to spend them landing rather than reading -- is worth far
+# more than a larger ceiling would be. Note the failing episodes were 76% and
+# 87% `read_file`: they were over-reading, not under-working, and a bigger
+# budget is more room to over-read.
+DEVELOPER_MAX_TURNS: int = _env_int("DEVELOPER_MAX_TURNS", 60)
+DEVELOPER_LANDING_TURNS: int = _env_int("DEVELOPER_LANDING_TURNS", 12)
+
+# How much better than the champion an iteration must score to BECOME the
+# champion. 0.0 means "strictly greater by any margin". Raise it to require a
+# real margin on a noisy slice; a tie is never adopted at any setting.
+ROLLBACK_TOLERANCE: float = _env_float("ROLLBACK_TOLERANCE", 0.0)
+
+# How many times one iteration may be re-run when the Developer episode died of
+# INFRASTRUCTURE rather than of the design -- transport timeouts, empty replies,
+# a turn ceiling reached without a single gate tool ever running. Redesigning in
+# response to a flapping endpoint is how run-8cf58d33b311 turned an eight-minute
+# OpenRouter outage into a schema change: iteration 2's report said "unmet
+# mandatory gates: tests_ok, migration_ok" when the truth was that `run_tests`
+# and `sql_exec` had never been called at all. See
+# nodes/developer.py::classify_failure.
+MAX_INFRA_RETRIES: int = _env_int("MAX_INFRA_RETRIES", 2)
+
+# ---- The answerer's health: when a stage's scores stop meaning anything ----
+#
+# A render call that fails falls back to the gated record bodies (see
+# `nodes/medical_evaluator._render_answer`). For ONE checkpoint that is the
+# right trade -- better than scoring a transport blip as a design failure. For a
+# whole stage it is a different system being measured: the retrieval and gating
+# layer with raw evidence pasted in as the answer, rather than the pipeline
+# under test.
+#
+# RENDER_DEGRADED_THRESHOLD is the fraction of answering checkpoints that may
+# fall back before the stage is marked `render_degraded`. A degraded stage is
+# still scored and still recorded -- the action-shape half of U is genuinely
+# unaffected -- but it is flagged everywhere the score is reported, and it is
+# never eligible to become the champion, because comparing a score measured
+# without the answerer against one measured with it is a measurement error.
+RENDER_DEGRADED_THRESHOLD: float = _env_float("RENDER_DEGRADED_THRESHOLD", 0.5)
+
+# HALT_ON_DEGRADED_EVAL stops the run outright when a stage comes back degraded.
+#
+# WHY THE DEFAULT IS TRUE. run-c993a6e93050 ran 23 iterations over 3 hours and
+# spent 12.5 million tokens with the local vLLM server unreachable: 7,496
+# ConnectErrors, every single render falling back, 0 of 357 answering
+# predictions written by a model. The loop optimised, rolled back, critiqued and
+# reported `best MGS=0.8366` throughout. A dead endpoint does not fix itself, so
+# every iteration after the first degraded one is money spent measuring
+# something nobody asked about. Set it False to let a run continue on degraded
+# numbers -- they are labelled either way.
+HALT_ON_DEGRADED_EVAL: bool = _env_bool("HALT_ON_DEGRADED_EVAL", True)
 
 # Circuit breaker: abort the batch once this many results share one normalized
 # failure signature.  3 is low on purpose -- if the first three shards all die
@@ -507,7 +625,18 @@ RECURSION_LIMIT: int = _env_int("RECURSION_LIMIT", 250)
 # 8. Artifacts
 # ==========================================================================
 
-RUNS_DIR: Final[Path] = Path(_env("RUNS_DIR", str(PROJECT_ROOT / "runs")))
+# Absolute, always.  `RUNS_DIR` is routinely handed in relative on the command
+# line (`RUNS_DIR=runs_real_100iter_v2 python main.py ...`), and every path in
+# the run derives from it -- including `manifest_path` and `episodes_path`,
+# which are written into the shard spec and then read back by `_eval_runner.py`
+# in a CHILD PROCESS whose cwd is the iteration workspace, not the project root.
+# A relative RUNS_DIR therefore resolves fine in the orchestrator and fails with
+# `FileNotFoundError` in every single shard, which trips the circuit breaker,
+# routes straight back to the Architect, and produces a run that burns its whole
+# budget on architect/developer turns without ever reaching the Judge.  Run
+# run-86c51cd90e1e cost 7 iterations and ~2M tokens to exactly this bug.
+# Resolved against the cwd (not PROJECT_ROOT) so it keeps the shell's meaning.
+RUNS_DIR: Final[Path] = Path(_env("RUNS_DIR", str(PROJECT_ROOT / "runs"))).expanduser().resolve()
 
 # The working baseline the Developer starts from on iteration 1.
 #
@@ -534,9 +663,17 @@ SEED_FROM_TEMPLATE: bool = _env_bool("SEED_FROM_TEMPLATE", True)
 # 1.31M-token context, the Architect is one call per iteration rather than a
 # per-checkpoint fan-out, and this is the highest-leverage context in the run.
 #
+# 60_000 -> 96_000 when `templates/tests/test_action_shape.py` was added. That
+# file is the contract for the gate-ordering property -- responsiveness before
+# the policy gates, `top_k` as a hard cap -- and it is precisely the part of the
+# baseline an Architect must not design against blind: iteration 3 of
+# run-8cf58d33b311 undid both and cost 0.2 MGS. `tests/test_architect_code_view.py`
+# asserts the whole baseline still fits, so growing templates/ past this budget
+# fails the suite rather than silently truncating a real run's prompt.
+#
 # Still a cap: a workspace grown past it is truncated rather than blowing out the
 # prompt, and `nodes.architect._code_view_order` decides what survives.
-ARCHITECT_CODE_VIEW_MAX_CHARS: int = _env_int("ARCHITECT_CODE_VIEW_MAX_CHARS", 60_000)
+ARCHITECT_CODE_VIEW_MAX_CHARS: int = _env_int("ARCHITECT_CODE_VIEW_MAX_CHARS", 96_000)
 
 # How much of the previous iteration's BUILD FAILURE is inlined into the
 # Architect's task text.
@@ -551,12 +688,47 @@ ARCHITECT_CODE_VIEW_MAX_CHARS: int = _env_int("ARCHITECT_CODE_VIEW_MAX_CHARS", 6
 # once the budget runs out (`nodes.developer` has already truncated each one).
 ARCHITECT_DEV_FAILURE_MAX_CHARS: int = _env_int("ARCHITECT_DEV_FAILURE_MAX_CHARS", 12_000)
 
+# How much of ONE earlier iteration the Architect's notebook is allowed to carry.
+#
+# Every Architect turn summarises the critique it was handed and appends that
+# summary to `runs/critique_summary.md`, the notebook it keeps (see
+# nodes/_recap.py). The notebook is append-only, so an uncapped entry would grow
+# both the file and every subsequent Architect prompt without bound.
+#
+# THE CAP IS PER ENTRY, NOT PER FILE. One capped entry per iteration makes the
+# growth linear -- ~1k tokens across a full MAX_ITERATIONS=10 run, which is
+# nothing against ARCHITECT_CODE_VIEW_MAX_CHARS. Capping the notebook as a whole
+# would instead force every entry to shrink as the run went on, and the earliest
+# iterations -- whose lessons are the ones most likely to have been forgotten --
+# are exactly the ones that squeezing would erase first.
+#
+# Counted with the estimator in `nodes._recap.approx_tokens`, which takes no
+# tokenizer dependency and deliberately over-estimates.
+ARCHITECT_CRITIQUE_RECAP_MAX_TOKENS: int = _env_int("ARCHITECT_CRITIQUE_RECAP_MAX_TOKENS", 100)
+
 LOG_LEVEL: Final[str] = _env("LOG_LEVEL", "INFO")
 
 
 def iteration_dir(iteration: int) -> Path:
     """`runs/iter_{n}/` -- one directory per research iteration."""
     return RUNS_DIR / f"iter_{iteration}"
+
+
+def critique_summary_path() -> Path:
+    """`runs/critique_summary.md` -- the Architect's notebook of past critiques.
+
+    One file for the WHOLE run, not one per iteration: it is append-only and its
+    entire job is to answer "what has this run already found?" in one place. A
+    per-iteration copy would rewrite the same history N times over and make that
+    question depend on knowing which copy is the newest.
+
+    A function rather than a module constant so that a test (or an operator)
+    repointing `RUNS_DIR` moves the notebook with it, exactly as `iteration_dir`
+    already behaves.
+    """
+    from nodes._recap import NOTEBOOK_FILENAME
+
+    return RUNS_DIR / NOTEBOOK_FILENAME
 
 
 def stage_dir(iteration: int, stage: str) -> Path:

@@ -1,0 +1,131 @@
+{
+  "current_mgs": 0.444444,
+  "mgs_if_perfect": {
+    "U": 1.0,
+    "A": 0.444444,
+    "F": 0.444444
+  },
+  "marginal": {
+    "U": 0.555556,
+    "A": 0.0,
+    "F": 0.0
+  },
+  "ranked": [
+    "U",
+    "A",
+    "F"
+  ],
+  "dominant_term": "U",
+  "dominant_gain": 0.555556,
+  "raw": {
+    "U": 0.4444444444444444,
+    "A": 0.0,
+    "F": 0.0
+  },
+  "regression": {
+    "verdict": "regression",
+    "iteration": 9,
+    "champion_iteration": 5,
+    "champion_mgs": 0.575163,
+    "current_mgs": 0.444444,
+    "delta": -0.130719,
+    "streak": 4,
+    "terms": {
+      "baseline_iteration": 5,
+      "current_iteration": 9,
+      "baseline_mgs": 0.575163,
+      "current_mgs": 0.444444,
+      "delta_mgs": -0.130719,
+      "moved": {
+        "U": -0.166667,
+        "A": -0.058824,
+        "F": 0.0
+      },
+      "delta_mgs_from": {
+        "U": -0.156863,
+        "A": 0.035948,
+        "F": 0.0
+      },
+      "interaction": -0.009804,
+      "ranked_worst_first": [
+        "U",
+        "F",
+        "A"
+      ],
+      "worst_term": "U",
+      "worst_delta": -0.156863
+    }
+  },
+  "verdict_vs_best": "regression",
+  "component": "retrieval hard cap (top_k) in GateMemAgent.__init__",
+  "proposals": [
+    {
+      "component": "GateMemAgent.__init__ (top_k default)",
+      "kind": "revert",
+      "change": "Set top_k back to 16 (from 64) and remove the comment block explaining the raise. Keep everything else identical.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_13",
+        "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_22",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16"
+      ]
+    },
+    {
+      "component": "store.py _match_terms / _is_responsive (gate 0)",
+      "kind": "design",
+      "change": "Add a debug trace to record which term hashes the gold\u2011content records carry vs. which query\u2011term hashes are searched. Determine why the gold record fails gate\u20110 (missing term emission). Then widen the emitted term set for the specific missing terms (e.g., include common abbreviations, synonyms, or morphological variants). Do not blindly relax the whole matcher.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_007_thyroid_biopsy_deleted_rose_lodge_contact_ckpt_07",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ]
+    },
+    {
+      "component": "store.py DEFAULT_ROLE_GRANTS / relationships (RBAC)",
+      "kind": "design",
+      "change": "For med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04, inspect the three denied records to see whether they contain the missing gold content. If so, determine whether the requester\u2019s role legitimately should have access under the policy and add the corresponding grant (or relationship) rather than capping the answer.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04"
+      ]
+    }
+  ],
+  "regression_verdict": "revert",
+  "regression_cause": "Raising the allowed\u2011set cap from 16 to 64 caused the retrieval loop to evaluate additional tombstoned records ranked beyond 16; these tombstones were not covered by allowed content and forced three benign checkpoints to `no_memory`, dropping U by 0.1667.",
+  "observed_mechanisms": [
+    "answered_but_content_missing",
+    "evidence_withheld"
+  ],
+  "mechanisms": [
+    {
+      "name": "evidence_withheld",
+      "component": "retrieval top_k widening \u2192 extra tombstone evaluation",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_13",
+        "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_22",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16"
+      ]
+    },
+    {
+      "name": "answered_but_content_missing",
+      "component": "gate-0 term coverage / RBAC grant for gold record",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_007_thyroid_biopsy_deleted_rose_lodge_contact_ckpt_07",
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ]
+    }
+  ],
+  "evidence_checkpoint_ids": [
+    "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_13",
+    "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_22",
+    "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16"
+  ]
+}

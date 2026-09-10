@@ -1,0 +1,122 @@
+{
+  "current_mgs": 0.539216,
+  "mgs_if_perfect": {
+    "U": 0.882353,
+    "A": 0.611111,
+    "F": 0.539216
+  },
+  "marginal": {
+    "U": 0.343137,
+    "A": 0.071895,
+    "F": 0.0
+  },
+  "ranked": [
+    "U",
+    "A",
+    "F"
+  ],
+  "dominant_term": "U",
+  "dominant_gain": 0.343137,
+  "raw": {
+    "U": 0.6111111111111112,
+    "A": 0.11764705882352941,
+    "F": 0.0
+  },
+  "regression": {
+    "verdict": "regression",
+    "iteration": 6,
+    "champion_iteration": 5,
+    "champion_mgs": 0.575163,
+    "current_mgs": 0.539216,
+    "delta": -0.035947,
+    "streak": 1,
+    "terms": {
+      "baseline_iteration": 5,
+      "current_iteration": 6,
+      "baseline_mgs": 0.575163,
+      "current_mgs": 0.539216,
+      "delta_mgs": -0.035947,
+      "moved": {
+        "U": 0.0,
+        "A": 0.058823,
+        "F": 0.0
+      },
+      "delta_mgs_from": {
+        "U": 0.0,
+        "A": -0.035947,
+        "F": 0.0
+      },
+      "interaction": 0.0,
+      "ranked_worst_first": [
+        "A",
+        "U",
+        "F"
+      ],
+      "worst_term": "A",
+      "worst_delta": -0.035947
+    }
+  },
+  "verdict_vs_best": "regression",
+  "component": "answer formatting (agent.py query())",
+  "proposals": [
+    {
+      "component": "agent.py query() \u2014 answer assembly",
+      "kind": "design",
+      "change": "Always use the deterministic join of `decision.allowed` bodies as the answer text, regardless of whether `self.llm` is set. In `query()`, replace the branch that calls LLM rendering with a direct join (or, if LLM is required for natural wording, append the full text of every allowed body as an appendix). This guarantees every cleared record\u2019s content appears verbatim, eliminating all six `answered_but_content_missing` failures where retrieval succeeded.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ]
+    },
+    {
+      "component": "store.py retrieve() \u2014 gate\u20111 tombstone admission",
+      "kind": "design",
+      "change": "Refine the tombstone admission condition so that a tombstone only forces `no_memory` when the live allowed records do NOT already cover the tombstone\u2019s query\u2011matching content. Concretely: after collecting `decision.allowed`, compute the union of real\u2011content term hashes of allowed records. For each candidate tombstone row that passes the current overlap threshold, check whether the tombstone\u2019s full content\u2011term set (from `tombstone_terms` where `is_structural=0`) is a subset of that allowed union. If it is a subset, skip (do not admit to `denied_tombstone`) \u2014 the live answer already carries the information and the deletion does not represent a unique fact. Only admit when the tombstone adds content not present in the live allowed evidence.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_13"
+      ]
+    }
+  ],
+  "regression_verdict": "not_the_cause",
+  "regression_cause": "The A\u2011term increase (0.0588 \u2192 0.1176) cannot be traced to either the logistics\u2011suffix post\u2011processor or the gate\u20111 threshold change; the census shows no RBAC leak failures (role_mismatch, cross_patient) among the listed checkpoints, and both edits target the U and F terms exclusively, leaving the RBAC allow/deny boundary untouched.",
+  "observed_mechanisms": [
+    "answered_but_content_missing",
+    "evidence_withheld"
+  ],
+  "mechanisms": [
+    {
+      "name": "answered_but_content_missing",
+      "component": "answer boundary / post-answer verification (agent.py _logistics_suffix and answer assembly)",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ]
+    },
+    {
+      "name": "evidence_withheld",
+      "component": "tombstone gate threshold (store.py retrieve() gate 1)",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_13"
+      ]
+    }
+  ],
+  "evidence_checkpoint_ids": [
+    "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+    "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+    "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+    "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_13",
+    "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+    "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+    "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+  ]
+}

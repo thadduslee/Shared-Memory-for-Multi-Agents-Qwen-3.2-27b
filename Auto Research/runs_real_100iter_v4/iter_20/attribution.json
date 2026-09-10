@@ -1,0 +1,110 @@
+{
+  "current_mgs": 0.588235,
+  "mgs_if_perfect": {
+    "U": 0.882353,
+    "A": 0.666667,
+    "F": 0.588235
+  },
+  "marginal": {
+    "U": 0.294118,
+    "A": 0.078431,
+    "F": 0.0
+  },
+  "ranked": [
+    "U",
+    "A",
+    "F"
+  ],
+  "dominant_term": "U",
+  "dominant_gain": 0.294118,
+  "raw": {
+    "U": 0.6666666666666666,
+    "A": 0.11764705882352941,
+    "F": 0.0
+  },
+  "regression": {
+    "verdict": "tied",
+    "iteration": 20,
+    "champion_iteration": 11,
+    "champion_mgs": 0.588235,
+    "current_mgs": 0.588235,
+    "delta": 0.0,
+    "streak": 8,
+    "terms": {
+      "baseline_iteration": 11,
+      "current_iteration": 20,
+      "baseline_mgs": 0.588236,
+      "current_mgs": 0.588236,
+      "delta_mgs": 0.0,
+      "moved": {
+        "U": 0.0,
+        "A": 0.0,
+        "F": 0.0
+      },
+      "delta_mgs_from": {
+        "U": 0.0,
+        "A": 0.0,
+        "F": 0.0
+      },
+      "interaction": 0.0,
+      "ranked_worst_first": [
+        "U",
+        "A",
+        "F"
+      ],
+      "worst_term": "U",
+      "worst_delta": 0.0
+    }
+  },
+  "verdict_vs_best": "tied",
+  "component": "_honor_deletion_request logistics-guard spare predicate in memory_system/store.py",
+  "proposals": [
+    {
+      "component": "_honor_deletion_request in memory_system/store.py (spare predicate: `not shares_phone_digest and not r_is_phone_line`)",
+      "kind": "design",
+      "change": "Spare any candidate whose overlap with a contact/phone delete-request is purely structural (location tokens and/or a shared phone digit-run) unless that candidate is exclusively the phone line being deleted; a scheduling/planning/med record that merely carries the clinic's phone is collateral, not the deletion target, and a phone digit-run is structural signalling not deletable content. No DDL \u2014 deletion_request_audit already records the decision.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ]
+    },
+    {
+      "component": "deletion_request_audit (SCHEMA_VERSION 7) verification step, run before any re-run",
+      "kind": "design",
+      "change": "Query deletion_request_audit for episodes en_010/en_011/en_013/en_019/en_020/en_021; confirm the gold-bearing records show decision='tombstoned' with a phone digest or phone-bearing body (confirms P1) before changing the predicate.",
+      "expected_fixes": []
+    }
+  ],
+  "regression_verdict": "not_the_cause",
+  "regression_cause": "Iteration 20 tied the champion at 0.5882 with every term at +0.0000 \u2014 there is no measured loss to attribute; the gate-3 scope-enforcement edit simply did not fire because the round's actual A failures are role_mismatch (role-grant absence, denied before the scope predicate runs) and cross_patient (structurally excluded by per-episode DB files and the patient_id filter), so the edit bought nothing rather than cost anything.",
+  "observed_mechanisms": [
+    "answered_but_content_missing"
+  ],
+  "mechanisms": [
+    {
+      "name": "answered_but_content_missing",
+      "component": "_honor_deletion_request spare predicate (over-tombstoning collateral gold-bearing scheduling records); the answer path proved non-culpable because decision.allowed bodies are appended verbatim and rescue_missing_logistics scans all live rows as-of",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ]
+    }
+  ],
+  "evidence_checkpoint_ids": [
+    "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+    "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+    "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+    "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+    "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+    "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+  ]
+}

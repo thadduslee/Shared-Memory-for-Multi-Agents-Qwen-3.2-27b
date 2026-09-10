@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS idx_rel_scope ON relationships(patient_id) WHERE scope <> ''; -- gate-3 scope enforcement: each retrieve() must find the requester's scope-carrying relationship to the patient; a WHERE-scoped index turns the per-query row scan over relationships(patient_id) into an index seek.

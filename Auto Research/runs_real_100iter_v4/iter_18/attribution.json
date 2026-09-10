@@ -1,0 +1,124 @@
+{
+  "current_mgs": 0.588235,
+  "mgs_if_perfect": {
+    "U": 0.882353,
+    "A": 0.666667,
+    "F": 0.588235
+  },
+  "marginal": {
+    "U": 0.294118,
+    "A": 0.078431,
+    "F": 0.0
+  },
+  "ranked": [
+    "U",
+    "A",
+    "F"
+  ],
+  "dominant_term": "U",
+  "dominant_gain": 0.294118,
+  "raw": {
+    "U": 0.6666666666666666,
+    "A": 0.11764705882352941,
+    "F": 0.0
+  },
+  "regression": {
+    "verdict": "tied",
+    "iteration": 18,
+    "champion_iteration": 11,
+    "champion_mgs": 0.588235,
+    "current_mgs": 0.588235,
+    "delta": 0.0,
+    "streak": 6,
+    "terms": {
+      "baseline_iteration": 11,
+      "current_iteration": 18,
+      "baseline_mgs": 0.588236,
+      "current_mgs": 0.588236,
+      "delta_mgs": 0.0,
+      "moved": {
+        "U": 0.0,
+        "A": 0.0,
+        "F": 0.0
+      },
+      "delta_mgs_from": {
+        "U": 0.0,
+        "A": 0.0,
+        "F": 0.0
+      },
+      "interaction": 0.0,
+      "ranked_worst_first": [
+        "U",
+        "A",
+        "F"
+      ],
+      "worst_term": "U",
+      "worst_delta": 0.0
+    }
+  },
+  "verdict_vs_best": "tied",
+  "component": "retrieval_coverage / answer-content reach (boundary of decision.allowed)",
+  "proposals": [
+    {
+      "component": "store.retrieve diagnostic (patient_census)",
+      "kind": "observability \u2014 must ship bundled with a behavioral edit, else the tie discards it",
+      "change": "Re-adopt idx_records_patient_seq + Decision.patient_census (iter-18) inside a run that also changes behavior, and read the census to classify each of the six golds as post-horizon / RBAC-denied / gate0-skip / absent-from-live-store.",
+      "expected_fixes": []
+    },
+    {
+      "component": "store._honor_deletion_request (deletion-scope matcher)",
+      "kind": "design",
+      "change": "Guard the content-overlap matcher so a logistics/appointment record sharing only contact/facility terms with a *_deleted_*_line request is NOT tombstoned. Matched record must share a content term that is not a _CONTACT_SENSE_WORD/facility token when the request's distinctive set is logistics-only. Runs before tombstone(), so F is untouched on deletion checkpoints that already pass.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ],
+      "schema_ddl": "-- Deletion audit: record which earlier record each deletion request matched, so\n-- over-matched tombstones (a logistics/appointment record swept in by 2+ shared\n-- contact/facility terms) become visible in predictions.jsonl instead of silent.\nCREATE TABLE IF NOT EXISTS deletion_request_audit (\n  episode_id TEXT NOT NULL,\n  request_text TEXT NOT NULL,\n  requested_by TEXT NOT NULL,\n  matched_record_id TEXT NOT NULL,\n  overlap_terms INTEGER NOT NULL,\n  PRIMARY KEY (requested_by, matched_record_id)\n);\n-- _honor_deletion_request INSERTs one row per tombstoned match; the guard in\n-- P2 then suppresses matching when overlap is logistics-only."
+    },
+    {
+      "component": "RBAC relationship join (retrieve() gate 3)",
+      "kind": "design",
+      "change": "Read the 3 denied_rbac record_ids at 010 from the census. If the records are the requester's legitimate content that a relationships row failed to clear, upsert the relationship in reset()/ingest; if they are truly confidential, accept U=0.6667 as policy-capped for this checkpoint.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04"
+      ]
+    },
+    {
+      "component": "retrieval top_k / rescue width",
+      "kind": "do-not-do (measured dead three times)",
+      "change": "Do not raise top_k, do not widen the rescue, do not unbind the candidate stop. Iteration-17 arithmetic proves the gold is not in the live cleared set at 021; store.py docstring documents the 12->64 top_k regression. Further retrieval widening is the fourth iteration of a wrong strategy.",
+      "expected_fixes": []
+    }
+  ],
+  "regression_verdict": "not_the_cause",
+  "regression_cause": "Iteration 18 added only an inert patient_census diagnostic field on Decision and an additive records(patient_id, seq) index \u2014 both documented as unable to branch action/answer/used_record_ids \u2014 so the +0.0000 on U/A/F is the expected no-op of an observability-only diff, not a regression, and the tie is because the six answered_but_content_missing checkpoints were untouched by design.",
+  "observed_mechanisms": [
+    "answered_but_content_missing"
+  ],
+  "mechanisms": [
+    {
+      "name": "answered_but_content_missing",
+      "component": "retrieval_coverage / deletion-scope matcher",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ],
+      "note": "Retrieval delivered 12-16 allowed and every allowed body is appended verbatim on both answer paths; gold tokens are therefore absent from the live cleared set. For 010/011/019 the gold or the label is held by RBAC-denied rows; for 013/020/021 the gold is post-horizon (infrastructure, unfixable) or inside a tombstoned body that tombstone() emptied to '' (deletion over-match, fixable in _honor_deletion_request)."
+    }
+  ],
+  "evidence_checkpoint_ids": [
+    "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+    "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+    "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+    "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+    "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+    "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+  ]
+}

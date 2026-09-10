@@ -1,0 +1,129 @@
+{
+  "current_mgs": 0.575163,
+  "mgs_if_perfect": {
+    "U": 0.941176,
+    "A": 0.611111,
+    "F": 0.575163
+  },
+  "marginal": {
+    "U": 0.366013,
+    "A": 0.035948,
+    "F": 0.0
+  },
+  "ranked": [
+    "U",
+    "A",
+    "F"
+  ],
+  "dominant_term": "U",
+  "dominant_gain": 0.366013,
+  "raw": {
+    "U": 0.6111111111111112,
+    "A": 0.058823529411764705,
+    "F": 0.0
+  },
+  "regression": {
+    "verdict": "tied",
+    "iteration": 10,
+    "champion_iteration": 5,
+    "champion_mgs": 0.575163,
+    "current_mgs": 0.575163,
+    "delta": 0.0,
+    "streak": 5,
+    "terms": {
+      "baseline_iteration": 5,
+      "current_iteration": 10,
+      "baseline_mgs": 0.575163,
+      "current_mgs": 0.575163,
+      "delta_mgs": 0.0,
+      "moved": {
+        "U": 0.0,
+        "A": 0.0,
+        "F": 0.0
+      },
+      "delta_mgs_from": {
+        "U": 0.0,
+        "A": 0.0,
+        "F": 0.0
+      },
+      "interaction": 0.0,
+      "ranked_worst_first": [
+        "U",
+        "A",
+        "F"
+      ],
+      "worst_term": "U",
+      "worst_delta": 0.0
+    }
+  },
+  "verdict_vs_best": "tied",
+  "component": "retrieval filter (ranking/top_k) plus deny-labelling (sanitize_and_decide / query_answer_denials)",
+  "proposals": [
+    {
+      "component": "agent.py query() debug dict",
+      "kind": "design",
+      "change": "Serialize decision.candidate_census into debug output so the ranked-out-vs-denied split is observable to the next iteration.",
+      "expected_fixes": []
+    },
+    {
+      "component": "store.py responsiveness/ranking (retrieve PASS-1, _is_structural handling)",
+      "kind": "design",
+      "change": "When the query carries no non-structural terms, do not demote structural phone/date/contact overlap in ranking so sparse logistics gold records can reach the allowed window.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ]
+    },
+    {
+      "component": "store.py query_answer_denials marginal accounting",
+      "kind": "design",
+      "change": "Count a denial as answer-bearing only when its carried digests are absent from the verbatim allowed bodies the answer will emit, not merely from the digest-union.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04"
+      ]
+    },
+    {
+      "component": "store.py deferred-tombstone coverage skip",
+      "kind": "design",
+      "change": "Admit a deferred tombstone (forcing no_memory) only when the query's real-content digests are not already covered by allowed records' content.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_13"
+      ]
+    }
+  ],
+  "regression_verdict": "not_the_cause",
+  "regression_cause": "Iteration 10's top_k 64->16 revert plus inert candidate_census tied the champion exactly (all attribution deltas +0.0000), so the edit caused no regression; it merely failed to advance U because the seven pre-existing content-missing failures sit in ranking and deny-labelling that the cap revert never touches, and the planted diagnostic is never serialized into any readable output.",
+  "observed_mechanisms": [
+    "answered_but_content_missing",
+    "evidence_withheld"
+  ],
+  "mechanisms": [
+    {
+      "name": "answered_but_content_missing",
+      "component": "retrieval filter ranking and top_k for the 0-denial cases (ckpt_09/ckpt_10); query_answer_denials marginal-digest labelling for the denied cases (ckpt_04/ckpt_05/ckpt_16)",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ]
+    },
+    {
+      "name": "evidence_withheld",
+      "component": "deferred-tombstone coverage skip in store.retrieve() combined with sanitize_and_decide branch 1 (tombstone wins over allowed)",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_13"
+      ]
+    }
+  ],
+  "evidence_checkpoint_ids": [
+    "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+    "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_13",
+    "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+    "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+  ]
+}

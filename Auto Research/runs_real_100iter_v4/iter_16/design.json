@@ -1,0 +1,24 @@
+{
+  "targets_metric": "U. The edit re-routes an existing, working mechanism to the path the harness measures (LLM supplied), recovering the three census-clean content-missing checkpoints (013/020/021) and possibly 011/019, raising U from 0.667 toward 0.83\u20130.94 while leaving A and F bit-identical, because appended content is pulled only from live records the requester already clears.",
+  "expected_tradeoff": "U gains ~3\u20135 of the six content-missing checkpoints, lifting MGS toward 0.74\u20130.85 if A stays 0.1176. Expected cost: ~zero to A and F, since rescue widens only answer wording with already-gated content and excludes tombstones. Residual risk is unchanged on checkpoint 010's spurious denial label (A side), which this change deliberately does not touch, so an A artifact persists one more iteration and must be diagnosed by an RBAC-grant sniff after this gain is banked.",
+  "retrieval_loop": "Unchanged except for one call site. store.retrieve() produces decision.allowed (top_k=16 ranked cap, gate-0 responsiveness first, then RBAC/scope gates), denied_rbac/scope (answer-bearing), denied_tombstone. sanitize_and_decide maps to action. Answer assembly in agent.query: on 'answer'/'answer_redacted', LLM branch writes summary then appends 'Details: ' + joined allowed bodies; no-LLM branch joins allowed bodies. NEW: after that assembly block, whether or not self.llm is set, call store.rescue_missing_logistics(patient, requester_id, requester_role, as_of_seq, answer, limit=8), which scans live (non-tombstoned) records of the patient as-of now, applies the identical role\u00d7sensitivity\u00d7scope grants as retrieve(), and returns Evidence whose body carries a logistics token absent from the assembled answer. Skipping records already in allowed_ids avoids double-emission. Rescue appends residual bodies to the answer text but never to used_record_ids.",
+  "forgetting_mechanism": "Unchanged, plus one explicit guard: rescue_missing_logistics must restrict its candidate set with NOT EXISTS (tombstone) so a tombstoned/shredded record can never surface content on the answer path. tombstone() already purges record_terms and crypto key material in-transaction and preserves digests in tombstone_terms for scoped responsiveness; rescue under no circumstances consults those digests for answerable content. Deletion stays observable-internal (is_deleted) and silent externally (no_memory when touched_deleted).",
+  "work_order": [
+    "memory_system/agent.py \u2013 GateMemAgent.query: extract the rescue block that currently sits in the no-LLM branch into a module-level helper `_rescue_append(store, patient_id, requester_id, requester_role, as_of_seq, answer, allowed_ids)`.",
+    "agent.py \u2013 in the `self.llm is not None` branch, after the existing 'Details: ' joined-bodies append, invoke `_rescue_append` (same args as no-LLM path). Confirm the helper returns None of the appended bodies when candidate text already in answer; append the rest under a 'Details: ' separator.",
+    "agent.py \u2013 in the no-LLM branch, replace the inline rescue code with the same `_rescue_append` call so both branches share the identical mechanism.",
+    "store.py \u2013 `rescue_missing_logistics`: add an explicit tombstone exclusion to its candidate SQL/scan (NOT EXISTS tombstones) so a deleted row can never contribute an answerable body; nothing else in the method changes.",
+    "tests/test_utility_focus.py \u2013 add one new test that builds GateMemAgent(':memory:', llm=<recorded callable>) and the chatty-rows-plus-sparse-logistics setup from the iter-13 widened-cap probe; assert the sparse gold (date/time) is present in out['answer'], proving the rescue now runs on the LLM path. Do not modify or re-sign existing tests.",
+    "Run the full local test gate (run_tests) and the smoke runner; the delivery must keep default top_k=16 and sanitize_and_decide semantics unchanged. If any test fails due to cap raise or rescue mis-guard, fix rather than weaken the test."
+  ],
+  "prior_art": [],
+  "dev_failure_mitigations": null,
+  "responds_to_dev_failure": null,
+  "critique_recap_added": [
+    {
+      "iteration": 15,
+      "kind": "critique",
+      "summary": "Iteration 15 tied because its fix was inert: rescue_missing_logistics was placed only in the no-LLM branch of agent.query, and the harness always supplies an LLM, so the rescue never ran. The six content-missing checkpoints (013/020/021 deny-free, 011/019 partially) persist because gold never entered decision.allowed \u2014 Details:-append and suffix read only allowed. Critique asks to run rescue ..."
+    }
+  ]
+}

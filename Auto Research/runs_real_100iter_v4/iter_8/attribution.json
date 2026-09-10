@@ -1,0 +1,127 @@
+{
+  "current_mgs": 0.575163,
+  "mgs_if_perfect": {
+    "U": 0.941176,
+    "A": 0.611111,
+    "F": 0.575163
+  },
+  "marginal": {
+    "U": 0.366013,
+    "A": 0.035948,
+    "F": 0.0
+  },
+  "ranked": [
+    "U",
+    "A",
+    "F"
+  ],
+  "dominant_term": "U",
+  "dominant_gain": 0.366013,
+  "raw": {
+    "U": 0.6111111111111112,
+    "A": 0.058823529411764705,
+    "F": 0.0
+  },
+  "regression": {
+    "verdict": "tied",
+    "iteration": 8,
+    "champion_iteration": 5,
+    "champion_mgs": 0.575163,
+    "current_mgs": 0.575163,
+    "delta": 0.0,
+    "streak": 3,
+    "terms": {
+      "baseline_iteration": 5,
+      "current_iteration": 8,
+      "baseline_mgs": 0.575163,
+      "current_mgs": 0.575163,
+      "delta_mgs": 0.0,
+      "moved": {
+        "U": 0.0,
+        "A": 0.0,
+        "F": 0.0
+      },
+      "delta_mgs_from": {
+        "U": 0.0,
+        "A": 0.0,
+        "F": 0.0
+      },
+      "interaction": 0.0,
+      "ranked_worst_first": [
+        "U",
+        "A",
+        "F"
+      ],
+      "worst_term": "U",
+      "worst_delta": 0.0
+    }
+  },
+  "verdict_vs_best": "tied",
+  "component": "retrieval allowed-set production (store.py retrieve() top_k cap / gate-0 candidate scan)",
+  "proposals": [
+    {
+      "component": "store.py retrieve() top_k cap and agent.py __init__ top_k default",
+      "kind": "design",
+      "change": "Raise top_k from 16 to 64 (remove the hard cap on allowed). Label-safe by the module's own marginal query_answer_denials accounting: growing allowed cannot add a denial and cannot flip answer->answer_redacted. Applies at 'if len(decision.allowed) >= top_k: break'.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16"
+      ]
+    },
+    {
+      "component": "Developer-local disposition diagnostic (read-only, oracle-driven; no shipped code)",
+      "kind": "design",
+      "change": "For each cited checkpoint, find the record holding each gold required string and log its disposition against the as-of store: allowed / denied_rbac / denied_scope / denied_tombstone / not-a-candidate-at-gate-0. Run in the same build as the top_k raise so dispositions are measured post-cap.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04"
+      ]
+    },
+    {
+      "component": "agent.py sanitize_and_decide branch 1 \u2014 HOLD, do not change this round",
+      "kind": "design",
+      "change": "No shipped change. F is perfect and the unconditional no_memory-on-tombstone ordering is the anti-reconstruction guard. Investigate via the P2 diagnostic whether ckpt_13's 4 denied_tombstone records are genuinely answer-bearing responsive before considering any refinement.",
+      "expected_fixes": []
+    }
+  ],
+  "regression_verdict": "not_the_cause",
+  "regression_cause": "The iteration's only edit appended decision.allowed bodies verbatim inside the self.llm is not None branch of query(), which is not the eval path \u2014 the harness runs with llm=None and already verbatim-joins every allowed body in the no-LLM branch \u2014 so the change could not and did not move U; the 6 content-missing failures are upstream (gold-carrying records absent from decision.allowed), not an answer-assembly defect.",
+  "observed_mechanisms": [
+    "answered_but_content_missing",
+    "evidence_withheld"
+  ],
+  "mechanisms": [
+    {
+      "name": "answered_but_content_missing",
+      "component": "retrieve() top_k enforcement and gate-0 candidate scan (answer already verbatim-joins every allowed body, so missing gold strings imply missing allowed records)",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ]
+    },
+    {
+      "name": "evidence_withheld",
+      "component": "agent.py sanitize_and_decide branch 1 (unconditional no_memory on any responsive tombstone hit)",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_13"
+      ]
+    }
+  ],
+  "evidence_checkpoint_ids": [
+    "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+    "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+    "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+    "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_13",
+    "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+    "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+    "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+  ]
+}

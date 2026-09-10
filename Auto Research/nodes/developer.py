@@ -71,6 +71,7 @@ from pathlib import Path
 from typing import Any
 
 import config
+import scoreboard
 from harness.dsh_client import DSHProfile, DSHResult, extract_json_block
 from harness.profiles import DEVELOPER_PROFILE
 from nodes._common import node_span, write_artifact
@@ -270,6 +271,92 @@ def _failure_entry(state: DeveloperState, observation: dict[str, Any]) -> dict[s
     }
 
 
+#: What `classify_failure` can conclude, and what each conclusion means for the
+#: graph. `routers.route_after_developer` retries `infrastructure` and only
+#: `infrastructure`; the other two go back to the Architect as they always did.
+CLASSIFY_DESIGN = "design"
+CLASSIFY_INFRASTRUCTURE = "infrastructure"
+CLASSIFY_INCONCLUSIVE = "inconclusive"
+
+
+def gate_status(final: dict[str, Any]) -> dict[str, str]:
+    """Per-gate: `passed`, `failed`, or `never_ran`.
+
+    THE DISTINCTION THIS DRAWS IS THE WHOLE POINT. The three gate booleans start
+    False and are only ever set by their tool completing, so `tests_ok=False`
+    means EITHER "run_tests ran and the suite failed" OR "run_tests was never
+    called". Those are opposite facts about a design and the report used to
+    render both as `unmet mandatory gates: tests_ok`.
+
+    In run-8cf58d33b311 iteration 2 the truth was the second one -- the episode
+    died of transport timeouts having never called `run_tests` or `sql_exec` --
+    and the Architect, told its tests had failed, rewrote the retrieval loop.
+    """
+    attempts = final.get("gate_attempts") or {}
+    status: dict[str, str] = {}
+    for gate in GATE_TOOLS:
+        entry = attempts.get(gate) if isinstance(attempts.get(gate), dict) else None
+        ran = bool(entry and int(entry.get("ran", 0)))
+        # A TRUE FLAG IS ITSELF PROOF THE TOOL RAN. `dev_observe` is the only
+        # writer of these three booleans and it only ever sets one as a side
+        # effect of that gate's tool completing, so `compile_ok is True` cannot
+        # mean anything except that `compile_check` ran and passed. Inferring it
+        # here rather than requiring the attempt record keeps this function
+        # correct for episode states that predate `gate_attempts` -- a resumed
+        # run rehydrated from an older checkpointer snapshot, or a test fixture.
+        if bool(final.get(gate)):
+            status[gate] = "passed"
+        elif ran:
+            status[gate] = "failed"
+        else:
+            status[gate] = "never_ran"
+    return status
+
+
+def classify_failure(final: dict[str, Any]) -> tuple[str, str]:
+    """Why this episode really failed: `(classification, human reason)`.
+
+    Three answers, and the graph treats them differently:
+
+    * `infrastructure` -- the episode never got a fair attempt. Either the
+      transport ate at least half the charged retries, or no mandatory gate was
+      ever run AND the transport failed at least once. Nothing here is evidence
+      about the design, so `routers.route_after_developer` sends the SAME
+      iteration back to the Developer rather than asking for a redesign.
+    * `inconclusive` -- the episode ran cleanly and still never exercised a
+      mandatory gate: it read, listed and thought its way to the turn ceiling
+      without building anything. That is a work-order problem, not a schema
+      problem, and re-running the identical work order would reproduce it -- so
+      it goes to the Architect, but labelled, so the Architect does not read a
+      phantom test failure into it.
+    * `design` -- a mandatory gate actually ran and actually failed. This is the
+      only case the original report was ever right about, and it is the only one
+      that should provoke a redesign.
+    """
+    transport = int(final.get("transport_failures", 0) or 0)
+    retries = int(final.get("retry_count", 0) or 0)
+    status = gate_status(final)
+    ran_any = any(value != "never_ran" for value in status.values())
+    failed_gates = [gate for gate, value in status.items() if value == "failed"]
+    never_ran = [gate for gate, value in status.items() if value == "never_ran"]
+
+    if transport and (not ran_any or transport * 2 >= max(retries, 1)):
+        return CLASSIFY_INFRASTRUCTURE, (
+            f"{transport} of {retries} charged retry/ies were transport failures"
+            + ("" if ran_any else "; no mandatory gate tool ever completed")
+        )
+    if failed_gates:
+        return CLASSIFY_DESIGN, (
+            "gate(s) ran and failed: " + ", ".join(sorted(failed_gates))
+        )
+    if never_ran:
+        return CLASSIFY_INCONCLUSIVE, (
+            "no mandatory gate failed; "
+            + ", ".join(f"`{GATE_TOOLS[gate]}` never ran" for gate in sorted(never_ran))
+        )
+    return CLASSIFY_DESIGN, "all mandatory gates passed but the episode did not finish"
+
+
 def _failure_report(
     final: dict[str, Any],
     *,
@@ -291,6 +378,9 @@ def _failure_report(
     }
     trace = str(final.get("last_stack_trace") or "")
     failures = [entry for entry in (final.get("failures") or []) if isinstance(entry, dict)]
+    status = gate_status(final)
+    classification, classification_reason = classify_failure(final)
+    transport_errors = [str(e) for e in (final.get("transport_errors") or []) if e]
     return {
         "iteration": iteration,
         "reason": reason,
@@ -300,6 +390,20 @@ def _failure_report(
         # invite the Architect to redesign around a style finding that never
         # blocked anything (see the advisory note at the top of this module).
         "missing_gates": [name for name in GATE_TOOLS if not gates[name]],
+        # `missing_gates` conflates two opposite facts; this separates them.
+        # A gate that never ran is not a gate that failed, and the Architect
+        # renders these rather than the bare list. See `gate_status`.
+        "gate_status": status,
+        "gates_failed": sorted(g for g, v in status.items() if v == "failed"),
+        "gates_never_ran": sorted(g for g, v in status.items() if v == "never_ran"),
+        # Why the episode really died, and whether the graph should redesign in
+        # response or just run the same iteration again. See `classify_failure`.
+        "classification": classification,
+        "classification_reason": classification_reason,
+        "n_transport_failures": int(final.get("transport_failures", 0) or 0),
+        # Deduped, newest last: a flapping endpoint produces the same string
+        # every time and five copies of it says nothing six does not.
+        "transport_errors": list(dict.fromkeys(transport_errors))[:5],
         "gate_tools": dict(GATE_TOOLS),
         "pass_rate": float(final.get("pass_rate", 0.0)),
         "retries_used": int(final.get("retry_count", 0)),
@@ -330,13 +434,82 @@ def _failure_history_entry(report: dict[str, Any]) -> dict[str, Any]:
         "iteration": report.get("iteration"),
         "signature": report.get("signature"),
         "missing_gates": report.get("missing_gates"),
+        # Carried into the history because `_repeat_warning` and the run summary
+        # both read it: "the same SIGNATURE recurred" means something different
+        # when both occurrences were transport failures.
+        "classification": report.get("classification"),
+        "gates_failed": report.get("gates_failed"),
+        "gates_never_ran": report.get("gates_never_ran"),
+        "n_transport_failures": report.get("n_transport_failures", 0),
         "pass_rate": report.get("pass_rate"),
         "retries_used": report.get("retries_used"),
         "error": build_errors[0] if build_errors else report.get("last_error") or "",
     }
 
 
-def _status_block(state: DeveloperState, box: DevToolbox) -> str:
+def _landing_call(state: DeveloperState) -> str:
+    """The gate tool to run NEXT when the turn budget is nearly spent, or "".
+
+    Ordered `compile_check` -> `run_tests` -> `sql_exec` because that is the
+    order in which each is cheapest to satisfy: there is no point running the
+    suite against code that does not parse, and no point applying DDL against a
+    suite that is red.
+    """
+    for gate, tool in GATE_TOOLS.items():
+        if not state.get(gate):
+            return tool
+    return ""
+
+
+def _turn_budget_block(state: DeveloperState, turns_used: int) -> str:
+    """How much of the episode is left, and -- near the end -- what to do with it.
+
+    WHY THIS EXISTS. The turn ceiling used to be a cliff the model could not
+    see. The status block reported `retry=0/5` and said nothing at all about
+    turns, so an episode could arrive at turn 59 with every file written, its
+    tests green, and no idea it was one turn from being cut off with nothing
+    scored.
+
+    run-b3275eb7e373 lost two of five iterations exactly there. Iteration 5
+    spent 60 of its 69 steps on `read_file`, had `run_tests` green at
+    pass_rate 1.0 and two source files written, and never called
+    `compile_check` or `sql_exec` -- it was two tool calls from a green build
+    when the ceiling took it. Iteration 3 was the same shape at 53 reads of 70
+    steps with all three files written and no gate ever run. Both were
+    classified `inconclusive`, which is accurate and was cold comfort.
+
+    An episode that ends without running its gates scores NOTHING -- the build
+    is not evaluated, the Judge never sees it, and every byte the Developer
+    wrote is discarded. So the cheapest useful intervention is to say how many
+    turns remain and, once that number is small, to say plainly that reading is
+    now the wrong move.
+
+    Deliberately NOT a bigger ceiling. Those two episodes were 76% and 87%
+    `read_file`: they were over-reading, not under-working, and more budget is
+    more room to over-read.
+    """
+    ceiling = _max_turns()
+    remaining = max(0, ceiling - turns_used)
+    line = f"turn={turns_used}/{ceiling} ({remaining} left)"
+    if remaining > int(config.DEVELOPER_LANDING_TURNS):
+        return line
+    tool = _landing_call(state)
+    if not tool:
+        return line + "\n!! LAND IT: all three mandatory gates are green -- call `finish` NOW."
+    ungated = [f"`{GATE_TOOLS[name]}`" for name in GATE_TOOLS if not state.get(name)]
+    return (
+        line
+        + "\n!! TURN BUDGET NEARLY SPENT. STOP READING AND STOP EDITING."
+        + f"\n!! Call {tool} NOW, then " + ", then ".join(t for t in ungated if t != f"`{tool}`")
+        + (", then `finish`." if len(ungated) > 1 else " `finish`.")
+        + "\n!! An episode that ends without running its gates is scored as a FAILED BUILD:"
+        + "\n!! it is never evaluated, and every edit you have already made is discarded."
+        + "\n!! Whatever is half-finished, land what works. A green build of less is worth"
+        + "\n!! more than a perfect design that never ran."
+    )
+
+
+def _status_block(state: DeveloperState, box: DevToolbox, turns_used: int = 0) -> str:
     """The machine-readable status the model reacts to.
 
     Everything the next action depends on is in here, which is what makes the
@@ -362,6 +535,7 @@ def _status_block(state: DeveloperState, box: DevToolbox) -> str:
         f"workspace_from={state.get('workspace_from', 'empty')}\n"
         f"schema_version={_schema_version(box.workspace)}\n"
         f"retry={state.get('retry_count', 0)}/{config.MAX_DEV_RETRIES}\n"
+        f"{_turn_budget_block(state, turns_used)}\n"
         f"files_present={','.join(present)}\n"
         f"compile_ok={str(bool(state.get('compile_ok'))).lower()}\n"
         f"migration_ok={str(bool(state.get('migration_ok'))).lower()}\n"
@@ -862,12 +1036,25 @@ async def dev_think(
     if not result.ok and not actions:
         # A transport failure is not a code failure; count it as a retry so a
         # flapping endpoint cannot spin the loop forever.
+        #
+        # AND COUNT IT SEPARATELY. `retry_count` alone cannot distinguish "this
+        # design cannot be built" from "the endpoint was down", and the failure
+        # report is read by the Architect as a critique of the design. In
+        # run-8cf58d33b311 iteration 2 every one of the episode's charged
+        # retries came from here -- eight minutes of `http transport exceeded`
+        # against OpenRouter -- and the report that reached the Architect
+        # mentioned no transport error at all: `last_error` was empty,
+        # `n_build_failures` was 0, and the headline said the mandatory gates
+        # were unmet. `classify_failure` reads this counter to stop that.
+        log.warning("developer: transport failure charged to the episode: %s", result.error)
         return Turn(
             result=result,
             actions=[{"tool": "compile_check", "args": {}}],
             update={
                 "thought": f"(transport error: {result.error})",
                 "retry_count": int(state.get("retry_count", 0)) + 1,
+                "transport_failures": int(state.get("transport_failures", 0)) + 1,
+                "transport_errors": [str(result.error or "unknown transport failure")],
                 "last_stack_trace": result.error or "",
             },
         )
@@ -1027,6 +1214,21 @@ async def dev_observe(state: DeveloperState) -> dict[str, Any]:
             "ok": ok,
         }],
     }
+
+    # GATE PROVENANCE, recorded before the gate flags themselves. This is what
+    # lets the failure report say "run_tests never ran" instead of "tests_ok is
+    # false", which are the same three characters of state and completely
+    # different news for the Architect. Only a gate tool that actually completed
+    # is recorded, so a turn the transport ate leaves no trace here -- which is
+    # exactly the signal `classify_failure` keys on.
+    gate_for_tool = {tool_name: gate for gate, tool_name in GATE_TOOLS.items()}
+    if tool in gate_for_tool:
+        attempts = {name: dict(entry) for name, entry
+                    in (state.get("gate_attempts") or {}).items()}
+        entry = attempts.setdefault(gate_for_tool[tool], {"ran": 0, "ok": False})
+        entry["ran"] = int(entry.get("ran", 0)) + 1
+        entry["ok"] = ok
+        update["gate_attempts"] = attempts
 
     if tool == "compile_check":
         update["compile_ok"] = ok
@@ -1246,7 +1448,13 @@ _KEEP_TURNS = 8
 # `recursion_limit`. MAX_DEV_RETRIES only counts FAILED observations, so a loop
 # making slow green progress -- read, read, list, read -- is bounded by nothing
 # else except the wall clock.
-_MAX_TURNS = 60
+#
+# READ AT CALL TIME, not bound here, so `config.DEVELOPER_MAX_TURNS` can be
+# overridden per run and by tests -- the same rule every other threshold in this
+# module follows. The module-level name is kept as a thin accessor because the
+# failure report quotes the ceiling in its prose.
+def _max_turns() -> int:
+    return int(config.DEVELOPER_MAX_TURNS)
 
 
 class DeveloperSession:
@@ -1330,8 +1538,8 @@ class DeveloperSession:
             log.warning("developer: episode wall clock (%.0fs) expired",
                         float(config.DSH_DEVELOPER_TIMEOUT_S))
             return "timeout"
-        if self.turns >= _MAX_TURNS:
-            log.warning("developer: turn ceiling (%d) reached", _MAX_TURNS)
+        if self.turns >= _max_turns():
+            log.warning("developer: turn ceiling (%d) reached", _max_turns())
             return "turn_cap"
         return ""
 
@@ -1350,7 +1558,7 @@ class DeveloperSession:
         and reading that as "replace" would silently throw the episode away.
         """
         for key, value in (update or {}).items():
-            if key in {"scratchpad", "failures"}:
+            if key in {"scratchpad", "failures", "transport_errors"}:
                 self.state[key] = list(self.state.get(key) or []) + list(value or [])
             elif key == "tokens_used":
                 self.state[key] = merge_dicts(self.state.get(key) or {}, value or {})
@@ -1370,7 +1578,7 @@ class DeveloperSession:
 {self.state.get('migration_sql', '') or '(none)'}
 ```
 
-{_status_block(self.state, self.box)}
+{_status_block(self.state, self.box, self.turns)}
 
 Start working. Call the tools you need; you will see each result before you
 choose the next one."""
@@ -1412,7 +1620,7 @@ choose the next one."""
                 "content": turn.result.content or turn.result.text or "(no reply)",
             })
 
-        status = _status_block(self.state, self.box)
+        status = _status_block(self.state, self.box, self.turns)
         for index, item in enumerate(executed):
             body = str((item["observation"] or {}).get("text") or "")
             # The status block rides on the LAST result of the batch only: it is
@@ -1466,16 +1674,39 @@ _NON_SOURCE = {"__pycache__", ".sessions", ".cordis", ".pytest_cache", ".ruff_ca
 _SCAFFOLDS = {"_smoke_runner.py", "_eval_runner.py"}
 
 
-def prepare_workspace(iteration: int) -> tuple[Path, str]:
+def prepare_workspace(
+    iteration: int, *, parent: int | None = None, reason: str = scoreboard.LINEAGE_CHAMPION
+) -> tuple[Path, str]:
     """Materialize the workspace the Developer will edit, and say where it came from.
 
-    THE LINEAGE IS THE POINT. Iteration N must start from iteration N-1's code,
-    or the loop is not self-improving -- it is N independent attempts, and the
+    THE LINEAGE IS THE POINT, AND IT IS THE BEST CODE, NOT THE LAST CODE.
+    Iteration N must start from a workspace that has already been measured, or
+    the loop is not self-improving -- it is N independent attempts, and the
     Critic's advice from round 1 has nothing to attach to in round 2.
 
       iteration 1  <- templates/ (a known-good baseline), or empty if
                       SEED_FROM_TEMPLATE is false
-      iteration N  <- a copy of iteration N-1's workspace
+      iteration N  <- a copy of the CHAMPION's workspace: the highest-scoring
+                      iteration judged so far, which is iteration N-1 whenever
+                      the loop is improving and is something earlier whenever
+                      it is not
+
+    `parent` is that champion, computed by the caller from `score_history` (see
+    `scoreboard.champion_iteration`); passing `None` falls back to N-1, which is
+    the behaviour this function had unconditionally.
+
+    WHY THE UNCONDITIONAL N-1 WAS A BUG. It made the lineage follow the most
+    recent code regardless of what the measurement said, so a change that lost
+    MGS became the permanent foundation of everything after it. run-8cf58d33b311
+    scored 0.3172, then 0.2222, then 0.1830, then 0.1190 -- each iteration
+    inheriting the one that had just been measured as worse, none of them able
+    to get back to the code that was working. Two iterations of that is bad
+    luck; four is a structural inability to keep a good answer.
+
+    It also meant a build that FAILED could still be a parent: iteration 2 of
+    that run hit the turn ceiling having written nothing, and iteration 3 was
+    seeded from it anyway. A workspace with no judged score is not a champion
+    candidate at all now, so that cannot happen.
 
     A copy rather than a shared directory so each iteration's code stays on disk
     exactly as it was evaluated. When the Critic cites a checkpoint from
@@ -1484,9 +1715,10 @@ def prepare_workspace(iteration: int) -> tuple[Path, str]:
     workspace = config.iteration_dir(iteration) / "workspace"
     workspace.mkdir(parents=True, exist_ok=True)
 
-    # Already populated (a resumed run): leave it alone, and leave its baseline
-    # alone too -- re-taking it here would record the resumed work as the
-    # starting state and blind the did-anything-change guard.
+    # Already populated (a resumed run, or an infrastructure retry of this same
+    # iteration): leave it alone, and leave its baseline alone too -- re-taking
+    # it here would record the resumed work as the starting state and blind the
+    # did-anything-change guard.
     if any(p.suffix == ".py" for p in workspace.rglob("*")):
         return workspace, "existing"
 
@@ -1494,11 +1726,35 @@ def prepare_workspace(iteration: int) -> tuple[Path, str]:
     # directory describes a workspace that no longer exists.
     (workspace.parent / "workspace_baseline.json").unlink(missing_ok=True)
 
-    previous = config.iteration_dir(iteration - 1) / "workspace" if iteration > 1 else None
+    fallback = iteration - 1
+    source_iteration = int(parent if parent is not None else fallback)
+    previous = (
+        config.iteration_dir(source_iteration) / "workspace"
+        if source_iteration >= 1 else None
+    )
     if previous and previous.is_dir():
         _copy_tree(previous, workspace)
-        log.info("workspace iter=%d seeded from iteration %d", iteration, iteration - 1)
-        return workspace, f"iter_{iteration - 1}"
+        if source_iteration != fallback and reason == scoreboard.LINEAGE_SKIPPED_FAILED:
+            # NOT a rollback, and the log must not call it one. Nothing scored
+            # worse here; iteration `fallback` produced no score at all because
+            # it could not build, so its workspace is not a foundation to stand
+            # on. Reading `ROLLED BACK` against a build failure is how a run's
+            # post-mortem invents a regression that never happened.
+            log.warning(
+                "workspace iter=%d SKIPPED A FAILED BUILD: seeded from iteration %d "
+                "(the most recent iteration whose gates passed) instead of iteration "
+                "%d, which never built; its failure report still goes forward",
+                iteration, source_iteration, fallback,
+            )
+        elif source_iteration != fallback:
+            log.warning(
+                "workspace iter=%d ROLLED BACK: seeded from iteration %d (the "
+                "current champion) instead of iteration %d, whose score was lower",
+                iteration, source_iteration, fallback,
+            )
+        else:
+            log.info("workspace iter=%d seeded from iteration %d", iteration, source_iteration)
+        return workspace, f"iter_{source_iteration}"
 
     if config.SEED_FROM_TEMPLATE and config.TEMPLATES_DIR.is_dir():
         _copy_tree(config.TEMPLATES_DIR, workspace)
@@ -1534,7 +1790,12 @@ async def developer_node(state: OrchestratorState) -> dict[str, Any]:
     """Run one Developer episode and project its result into the macro state."""
     iteration = int(state.get("iteration_count", 1))
     phase = str(state.get("current_curriculum_phase") or config.CURRICULUM_PHASES[0])
-    workspace, provenance = prepare_workspace(iteration)
+    # THE CHAMPION, not the predecessor. `champion_iteration` returns the
+    # fallback unchanged when nothing has been judged yet or when the best
+    # iteration IS the previous one, so on an improving run this is a no-op.
+    parent, lineage_reason = scoreboard.lineage_parent(state, fallback=iteration - 1)
+    workspace, provenance = prepare_workspace(iteration, parent=parent, reason=lineage_reason)
+    rolled_back = parent != iteration - 1 and provenance == f"iter_{parent}"
     _TOOLBOXES.pop(str(workspace.resolve()), None)  # fresh toolbox per iteration
 
     async with node_span("developer", iteration, phase) as span:
@@ -1551,6 +1812,7 @@ async def developer_node(state: OrchestratorState) -> dict[str, Any]:
             "compile_ok": False, "tests_ok": False, "migration_ok": False,
             "lint_ok": False, "smoke_ok": False, "done": False,
             "pass_rate": 0.0, "last_stack_trace": None,
+            "gate_attempts": {}, "transport_failures": 0, "transport_errors": [],
         }
         # The episode runs to one of its own stop conditions -- gates green, a
         # `finish` accepted, the retry budget gone, the wall clock, or the turn
@@ -1584,8 +1846,16 @@ async def developer_node(state: OrchestratorState) -> dict[str, Any]:
         tokens = _add_usage({}, final.get("tokens_used"))
         span["tokens"] = tokens.get("total_tokens", 0)
         span["workspace_from"] = provenance
+        span["rolled_back"] = rolled_back
+        # WHY the parent is not N-1, alongside the bare fact that it isn't. A
+        # post-mortem reading `rolled_back: true` alone cannot tell a score
+        # rollback from a skipped failed build, and they call for opposite
+        # conclusions about the run.
+        span["lineage_reason"] = lineage_reason
         span["retries"] = final.get("retry_count", 0)
+        span["transport_failures"] = int(final.get("transport_failures", 0) or 0)
         span["gates_green"] = gates_green
+        span["gate_status"] = gate_status(final)
 
         # What this episode actually built, as opposed to what it inherited.
         # Reported next to the gates because the two are easy to confuse and
@@ -1596,10 +1866,22 @@ async def developer_node(state: OrchestratorState) -> dict[str, Any]:
         span["files_changed"] = len(changed)
 
         update: dict[str, Any] = {
+            # The iteration got as far as a build, so whatever transport trouble
+            # its Architect turn had is over. Reset here rather than in the
+            # Architect, which would clear the budget on the very retry it is
+            # meant to bound. See graph.architect_retry_node.
+            "architect_retry_count": 0,
             "memory_codebase": str(workspace.resolve()),
             "codebase_delta": delta,
             "dev_set_pass_rate": float(final.get("pass_rate", 0.0)),
             "dev_retries_used": int(final.get("retry_count", 0)),
+            # How much of the episode's turn budget the work order actually
+            # cost. The Architect calibrates the NEXT work order against it:
+            # in run-b3275eb7e373 a 5-step order landed in 17-19 turns while
+            # 8- and 10-step orders hit the 60-turn ceiling with the gates
+            # never run, and nothing told the Architect that was the pattern.
+            "dev_turns_used": int(session.turns),
+            "dev_turn_ceiling": _max_turns(),
             "dev_files_changed": changed,
             "token_usage": tokens,
             "node_timings": [span],
@@ -1613,7 +1895,7 @@ async def developer_node(state: OrchestratorState) -> dict[str, Any]:
             if stopped_by in {"timeout", "turn_cap"}:
                 limit = (
                     f"the {config.DSH_DEVELOPER_TIMEOUT_S:.0f}s episode wall clock"
-                    if stopped_by == "timeout" else f"the {_MAX_TURNS}-turn ceiling"
+                    if stopped_by == "timeout" else f"the {_max_turns()}-turn ceiling"
                 )
                 ended = f"developer hit {limit} after {int(final.get('retry_count', 0))} retry/ies"
             else:
@@ -1639,10 +1921,18 @@ async def developer_node(state: OrchestratorState) -> dict[str, Any]:
             update["dev_failure_report"] = report
             update["dev_failure_history"] = [_failure_history_entry(report)]
             write_artifact(iter_dir / "developer_failure.json", report)
+            # The log line says which gates FAILED and which never RAN, rather
+            # than one undifferentiated `missing=` list. Told apart at the point
+            # of failure they are one word each; told apart afterwards they cost
+            # a session-log archaeology dig, which is how run-8cf58d33b311's
+            # iteration 2 got read as a test failure for the rest of the run.
             log.warning(
-                "developer exhausted at iteration %d: signature=%s missing=%s last_error=%s",
-                iteration, signature, ",".join(report["missing_gates"]) or "(none)",
-                report["last_error"] or "(none)",
+                "developer exhausted at iteration %d: classification=%s (%s) "
+                "signature=%s failed=%s never_ran=%s transport_failures=%d last_error=%s",
+                iteration, report["classification"], report["classification_reason"],
+                signature, ",".join(report["gates_failed"]) or "(none)",
+                ",".join(report["gates_never_ran"]) or "(none)",
+                report["n_transport_failures"], report["last_error"] or "(none)",
             )
         else:
             # A green build must CLEAR the report. `dev_failure_report` has no

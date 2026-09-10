@@ -103,7 +103,12 @@ ARCHITECT_PROFILE = DSHProfile(
         "Output Markdown prose followed by a single ```json fenced block with keys: "
         "schema_ddl, migration_sql, retrieval_loop, forgetting_mechanism, "
         "work_order (an ordered array of concrete steps), targets_metric, "
-        "expected_tradeoff."
+        "expected_tradeoff.\n\n"
+        "The task may ask for a further key in that same block -- a summary of the "
+        "previous iteration's critique. That summary is appended to critique_summary.md, "
+        "the notebook you keep, and it is the loop's only memory of iterations whose "
+        "documents nobody will open again, so write it for a reader who has seen none of "
+        "this. Include exactly the keys the task asks for and no others."
     ),
 )
 

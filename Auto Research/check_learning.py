@@ -58,6 +58,130 @@ def _source_files(workspace: Path) -> dict[str, str]:
     return out
 
 
+def _verdict_vs_best(mgs: float, earlier: dict[int, float]) -> str:
+    """How this iteration compares with the best BEFORE it, as a coloured word.
+
+    Empty for the first measurement, which has nothing to be compared against
+    and must not be dressed up as a win.
+    """
+    if not earlier:
+        return ""
+    best = max(earlier.values())
+    if mgs > best + 1e-9:
+        return f"  {GREEN}new best{OFF}"
+    if mgs < best - 1e-9:
+        return f"  {RED}below best{OFF}"
+    return f"  {YELLOW}tied{OFF}"
+
+
+def _report_champion(runs: Path, iters: list, seen_mgs: dict[int, float]) -> bool:
+    """Did the loop keep its best answer, and does it say so?
+
+    Three things are checked, and each of them was silently false in
+    run-8cf58d33b311:
+
+    1.  LINEAGE. When iteration N scored below the best, did iteration N+1
+        inherit the CHAMPION's workspace or the loser's? `workspace_from` in
+        each iteration's developer span records the answer.
+    2.  HONESTY. Does the run summary's `halt_reason` report the best MGS, or
+        does it report the last one under the label "best"?
+    3.  ATTRIBUTION. Was the Critic even told a regression had happened? A
+        critique that answers "dominant_term = U" for the fourth time running,
+        on a run that has lost 0.2 MGS, is a critique that was never handed the
+        one fact that mattered.
+    """
+    if len(seen_mgs) < 2:
+        return True
+    print(f"{BOLD}KEEPING THE BEST ANSWER{OFF}")
+    best_iter = max(seen_mgs, key=lambda k: (seen_mgs[k], -k))
+    last_iter = max(seen_mgs)
+    print(f"  best: iteration {best_iter} (MGS={seen_mgs[best_iter]:.4f});  "
+          f"last: iteration {last_iter} (MGS={seen_mgs[last_iter]:.4f})")
+
+    by_iter = dict(iters)
+    problems = 0
+    for n in sorted(seen_mgs):
+        successor = by_iter.get(n + 1)
+        if successor is None:
+            continue
+        best_before = max((v for k, v in seen_mgs.items() if k <= n), default=0.0)
+        if seen_mgs[n] >= best_before - 1e-9:
+            continue  # iteration n WAS the best; inheriting it is correct
+        champion = max((k for k, v in seen_mgs.items() if k <= n and v >= best_before - 1e-9),
+                       default=n)
+        parent = _workspace_parent(successor)
+        if parent == f"iter_{n}":
+            problems += 1
+            print(f"  {RED}FAIL{OFF} iteration {n + 1} inherited iteration {n} "
+                  f"(MGS={seen_mgs[n]:.4f}) instead of the champion, iteration "
+                  f"{champion} (MGS={best_before:.4f})")
+        elif parent:
+            print(f"  {GREEN}OK  {OFF} iteration {n + 1} rolled back to {parent} "
+                  f"rather than inheriting iteration {n}")
+
+    summary = _run_summary(runs)
+    reason = str(summary.get("halt_reason") or "")
+    if "best MGS=" in reason:
+        claimed = reason.split("best MGS=")[1].split(";")[0].split(" ")[0].rstrip(",")
+        try:
+            if abs(float(claimed) - seen_mgs[best_iter]) > 5e-4:
+                problems += 1
+                print(f"  {RED}FAIL{OFF} halt_reason claims best MGS={claimed} "
+                      f"but the best measured was {seen_mgs[best_iter]:.4f}")
+            else:
+                print(f"  {GREEN}OK  {OFF} halt_reason reports the true best "
+                      f"(MGS={claimed})")
+        except ValueError:
+            pass
+
+    told = 0
+    for n, d in iters:
+        attribution = _load(d / "attribution.json") or {}
+        if attribution.get("regression"):
+            told += 1
+    regressions = sum(
+        1 for n in sorted(seen_mgs)
+        if any(k < n for k in seen_mgs)
+        and seen_mgs[n] < max(v for k, v in seen_mgs.items() if k < n) - 1e-9
+    )
+    if regressions and not told:
+        problems += 1
+        print(f"  {RED}FAIL{OFF} {regressions} iteration(s) scored below the best "
+              f"and no critique was told so (no `regression` in attribution.json)")
+    elif regressions:
+        print(f"  {GREEN}OK  {OFF} {told} critique(s) were handed the regression")
+    if not problems:
+        print(f"  {GREEN}the loop kept its best answer{OFF}")
+    print()
+    return problems == 0
+
+
+def _workspace_parent(iter_dir: Path) -> str:
+    """Which iteration's workspace this one was seeded from, per its own span.
+
+    Read from `developer_failure.json` when the build failed, and otherwise from
+    the run summary's node timings -- whichever is present. Returns "" when the
+    provenance was not recorded, which is the case for runs that predate it.
+    """
+    failure = _load(iter_dir / "developer_failure.json") or {}
+    if failure.get("workspace_from"):
+        return str(failure["workspace_from"])
+    summary = _run_summary(iter_dir.parent)
+    n = int(iter_dir.name.split("_")[1])
+    for span in summary.get("node_timings") or []:
+        if span.get("node") == "developer" and span.get("iteration") == n:
+            return str(span.get("workspace_from") or "")
+    return ""
+
+
+def _run_summary(runs: Path) -> dict:
+    for path in sorted(runs.glob("summary_*.json")):
+        data = _load(path)
+        if data:
+            return data
+    return {}
+
+
 def main(argv: list[str]) -> int:
     runs = Path(argv[1] if len(argv) > 1 else "runs").resolve()
     if not runs.is_dir():
@@ -98,10 +222,25 @@ def main(argv: list[str]) -> int:
             diff = mgs - previous_mgs
             colour = GREEN if diff > 0 else (RED if diff < 0 else YELLOW)
             delta = f"{colour}{diff:+8.4f}{OFF}"
+        # The verdict against the BEST, not against the predecessor. A run that
+        # falls off a cliff and climbs half-way back has a positive delta and is
+        # still below where it started, and the delta column alone reads that as
+        # progress -- which is how run-8cf58d33b311's iteration 4 (0.1830, a
+        # third below iteration 1) could look like a recovery.
+        verdict = _verdict_vs_best(mgs, {k: v for k, v in seen_mgs.items() if k < n})
         print(f"  {n:<6}{u:>8.3f}{a:>8.3f}{f:>8.3f}{mgs:>9.4f}{delta}   "
-              f"{report.get('curriculum_phase', '?')}")
+              f"{report.get('curriculum_phase', '?')}{verdict}")
         previous_mgs = mgs
     print()
+
+    # ---- did the loop keep its best answer? -------------------------------
+    #
+    # THE CHANNEL THAT DID NOT EXIST. Every other check in this script asks
+    # whether information crossed an edge -- critique to design, schema to
+    # migration, workspace to workspace. None of them asks the question that
+    # actually killed run-8cf58d33b311: when the loop measured a change as
+    # worse, did it keep building on it anyway?
+    kept_the_best = _report_champion(runs, iters, seen_mgs)
 
     # PROVENANCE GATE. Under MOCK_MODE the Judge overwrites the headline
     # U/A/F/MGS with fixture values from the scenario and files the real
@@ -212,6 +351,11 @@ def main(argv: list[str]) -> int:
         checks.append(("measured-metrics", False))
     failed = [name for name, ok in checks if ok is False]
     unknown = [name for name, ok in checks if ok is None]
+    # A loop that carried every critique forward and still threw away its own
+    # best answer is not learning, whatever the other channels say -- so this
+    # joins them rather than merely printing above them.
+    if not kept_the_best:
+        failed.append("champion")
     if failed:
         print(f"{RED}{BOLD}NOT LEARNING{OFF} -- broken channel(s): "
               f"{', '.join(sorted(set(failed)))}")

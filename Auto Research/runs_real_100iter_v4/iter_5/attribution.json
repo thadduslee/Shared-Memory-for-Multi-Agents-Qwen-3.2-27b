@@ -1,0 +1,89 @@
+{
+  "current_mgs": 0.575163,
+  "mgs_if_perfect": {
+    "U": 0.941176,
+    "A": 0.611111,
+    "F": 0.575163
+  },
+  "marginal": {
+    "U": 0.366013,
+    "A": 0.035948,
+    "F": 0.0
+  },
+  "ranked": [
+    "U",
+    "A",
+    "F"
+  ],
+  "dominant_term": "U",
+  "dominant_gain": 0.366013,
+  "raw": {
+    "U": 0.6111111111111112,
+    "A": 0.058823529411764705,
+    "F": 0.0
+  },
+  "regression": {},
+  "verdict_vs_best": "improved",
+  "component": "answer prompt (answer extraction boundary in GateMemAgent.query)",
+  "proposals": [
+    {
+      "component": "answer prompt (GateMemAgent.query -> self.llm call)",
+      "kind": "design",
+      "change": "Require the answer prompt to emit every date/time/phone/dosing/contact token found in the evidence as an explicit list item; forbid paraphrasing logistics records; treat a record carrying a distinct time/phone/instruction as mandatory inclusion, not summarizable context. If the prompt text is not editable (injected llm wrapper), this mechanism is harness-capped and retrieval changes will not move U for these six.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ]
+    },
+    {
+      "component": "_is_responsive tombstoned branch + retrieve gate-1 admit (store.py)",
+      "kind": "design",
+      "change": "Raise the tombstone-responsiveness admit from total>0 to >=2 real-content (is_structural=0) digests, matching the >=2 answer-bearing bar already used in gates 2/3 and in _honor_deletion_request. A single shared content word among several deleted records must not flip an otherwise complete live answer to no_memory. No schema change: M5 is_structural DDL is correct and already applied; this is a cardinality threshold in the tombstoned branch of _is_responsive and the `if total <= 0: continue` admit in retrieve.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_13"
+      ]
+    }
+  ],
+  "observed_mechanisms": [
+    "answered_but_content_missing",
+    "evidence_withheld"
+  ],
+  "mechanisms": [
+    {
+      "name": "answered_but_content_missing",
+      "component": "answer prompt / evidence assembly",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ],
+      "note": "retrieval exonerated: allowed=12..16, four checkpoints below the top_k=16 cap; evidence bodies passed in full; answerer used 2-9 of them"
+    },
+    {
+      "name": "evidence_withheld",
+      "component": "tombstone responsiveness threshold (_is_responsive tombstoned branch / gate-1 admit)",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_13"
+      ],
+      "note": "4 real-content tombstone overlaps (is_structural=0 filter passed) each >0 admit flips 16 live answers to no_memory; threshold should be >=2 real-content digests"
+    }
+  ],
+  "evidence_checkpoint_ids": [
+    "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+    "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+    "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+    "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_13",
+    "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+    "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+    "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+  ]
+}

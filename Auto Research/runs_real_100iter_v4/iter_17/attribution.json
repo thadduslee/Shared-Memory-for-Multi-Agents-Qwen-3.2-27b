@@ -1,0 +1,109 @@
+{
+  "current_mgs": 0.588235,
+  "mgs_if_perfect": {
+    "U": 0.882353,
+    "A": 0.666667,
+    "F": 0.588235
+  },
+  "marginal": {
+    "U": 0.294118,
+    "A": 0.078431,
+    "F": 0.0
+  },
+  "ranked": [
+    "U",
+    "A",
+    "F"
+  ],
+  "dominant_term": "U",
+  "dominant_gain": 0.294118,
+  "raw": {
+    "U": 0.6666666666666666,
+    "A": 0.11764705882352941,
+    "F": 0.0
+  },
+  "regression": {
+    "verdict": "tied",
+    "iteration": 17,
+    "champion_iteration": 11,
+    "champion_mgs": 0.588235,
+    "current_mgs": 0.588235,
+    "delta": 0.0,
+    "streak": 5,
+    "terms": {
+      "baseline_iteration": 11,
+      "current_iteration": 17,
+      "baseline_mgs": 0.588236,
+      "current_mgs": 0.588236,
+      "delta_mgs": 0.0,
+      "moved": {
+        "U": 0.0,
+        "A": 0.0,
+        "F": 0.0
+      },
+      "delta_mgs_from": {
+        "U": 0.0,
+        "A": 0.0,
+        "F": 0.0
+      },
+      "interaction": 0.0,
+      "ranked_worst_first": [
+        "U",
+        "A",
+        "F"
+      ],
+      "worst_term": "U",
+      "worst_delta": 0.0
+    }
+  },
+  "verdict_vs_best": "tied",
+  "component": "evidence_horizon",
+  "proposals": [
+    {
+      "component": "store.py::retrieve (inert Decision.candidate_census)",
+      "kind": "design",
+      "change": "Extend the existing census rows to record, for every patient record seq <= as_of carrying content or logistics tokens, a disposition from {allowed, deny_rbac, deny_scope, deny_tombstone, gate0_skip, post_horizon} plus has_logistics/token_in_answer; keep it read-only and non-branching. Read the six failing rows from predictions.jsonl to classify each gold as RBAC-withheld vs post-horizon vs gate0-skipped-non-logistics vs absent.",
+      "expected_fixes": []
+    },
+    {
+      "component": "store.py::rescue_missing_logistics / agent.py answer assembly",
+      "kind": "design",
+      "change": "Halt all further candidate-widening (rescue scope, gate relaxation, top_k raises). Iteration 17's un-bounded rescue tied on all six checkpoints, proving the gold is not reachable by enlarging the live-cleared scan. Iteration 18 must not spend on retrieval.",
+      "expected_fixes": []
+    },
+    {
+      "component": "role_grants / sanitize_and_decide (RBAC policy surface)",
+      "kind": "design",
+      "change": "Do not increase any grant to surface the denied_rbac content on 010/011/019; if the census places their gold in the denial set, treat those three as U-capped-by-A and leave them unfixed.",
+      "expected_fixes": []
+    }
+  ],
+  "regression_verdict": "not_the_cause",
+  "regression_cause": "Iteration 17's un-bounding of rescue_missing_logistics candidate supply is not the cause of the tie -- all three terms are unchanged at +0.0000 and the same six checkpoints failed identically; the evidence (ckpt_021 at allowed=13 < top_k with full verbatim body join, ckpt_011 at allowed=14 similarly) shows the gold was never in a starved or skipped live cleared record for the edit to reach.",
+  "observed_mechanisms": [
+    "answered_but_content_missing"
+  ],
+  "mechanisms": [
+    {
+      "name": "answered_but_content_missing",
+      "component": "evidence_horizon (gold not in any live cleared seq<=as_of record; RBAC trio 010/011/019 potentially behind legitimate denials)",
+      "kind": "infrastructure",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ]
+    }
+  ],
+  "evidence_checkpoint_ids": [
+    "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03",
+    "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+    "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+    "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+    "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+    "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04"
+  ]
+}

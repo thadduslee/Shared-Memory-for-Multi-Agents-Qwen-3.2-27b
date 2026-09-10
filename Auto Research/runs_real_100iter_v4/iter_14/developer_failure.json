@@ -1,0 +1,71 @@
+{
+  "iteration": 14,
+  "reason": "developer exhausted 5 retries (compile_ok=True tests_ok=True migration_ok=True)",
+  "signature": "92c875578a8bace4",
+  "gates": {
+    "compile_ok": true,
+    "tests_ok": true,
+    "migration_ok": true,
+    "lint_ok": true,
+    "smoke_ok": true
+  },
+  "missing_gates": [],
+  "gate_status": {
+    "compile_ok": "passed",
+    "tests_ok": "passed",
+    "migration_ok": "passed"
+  },
+  "gates_failed": [],
+  "gates_never_ran": [],
+  "classification": "design",
+  "classification_reason": "all mandatory gates passed but the episode did not finish",
+  "n_transport_failures": 0,
+  "transport_errors": [],
+  "gate_tools": {
+    "compile_ok": "compile_check",
+    "tests_ok": "run_tests",
+    "migration_ok": "sql_exec"
+  },
+  "pass_rate": 1.0,
+  "retries_used": 5,
+  "retry_cap": 5,
+  "exhausted": true,
+  "workspace_from": "iter_13",
+  "files_written": [],
+  "last_error": "",
+  "last_stack_trace": "",
+  "failures": [
+    {
+      "step": 7,
+      "tool": "grep",
+      "args": {
+        "grep_string": "candidate_census",
+        "path": "memory_system/store.py"
+      },
+      "kind": "build",
+      "signature": "92c875578a8bace4",
+      "error": "FAILED grep: unknown tool 'grep'; valid: ['apply_patch', 'compile_check', 'finish', 'list_dir', 'read_file', 'run_linter', 'run_sandbox_smoke_test', 'run_tests', 'sql_exec', 'write_file']",
+      "observation": "FAILED grep: unknown tool 'grep'; valid: ['apply_patch', 'compile_check', 'finish', 'list_dir', 'read_file', 'run_linter', 'run_sandbox_smoke_test', 'run_tests', 'sql_exec', 'write_file']"
+    },
+    {
+      "step": 15,
+      "tool": "finish",
+      "args": {},
+      "kind": "loop",
+      "signature": null,
+      "error": "finish rejected: no source file changed in this episode",
+      "observation": "finish rejected: the gates are green but this episode has not changed any .py or .sql file. The workspace was seeded from the previous iteration, so green gates here only confirm that the PREVIOUS iteration built -- they are not evidence about the work order you were given.\nImplement the work order, then re-run the gate tools and finish. If you believe the change is already present, say which file and which lines implement it and change them; scratch files and dumped text do not count.\nA work order that describes code already in the workspace is a fact about the DESIGN, and it is not permission to finish: an episode that ends here produces an iteration byte-identical to the last one. Pick the step in the work order that is NOT literally in the code and implement that."
+    },
+    {
+      "step": 19,
+      "tool": "finish",
+      "args": {},
+      "kind": "loop",
+      "signature": null,
+      "error": "finish rejected: no source file changed in this episode",
+      "observation": "finish rejected: the gates are green but this episode has not changed any .py or .sql file. The workspace was seeded from the previous iteration, so green gates here only confirm that the PREVIOUS iteration built -- they are not evidence about the work order you were given.\nImplement the work order, then re-run the gate tools and finish. If you believe the change is already present, say which file and which lines implement it and change them; scratch files and dumped text do not count.\nA work order that describes code already in the workspace is a fact about the DESIGN, and it is not permission to finish: an episode that ends here produces an iteration byte-identical to the last one. Pick the step in the work order that is NOT literally in the code and implement that."
+    }
+  ],
+  "n_build_failures": 1,
+  "n_loop_failures": 2
+}

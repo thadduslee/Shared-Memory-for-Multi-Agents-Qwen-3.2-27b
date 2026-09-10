@@ -157,7 +157,14 @@ async def test_the_next_architect_is_shown_where_the_developer_failed(monkeypatc
     assert len(architect_tasks) >= 2, "the loop should have re-entered the Architect"
     second = architect_tasks[1]
     assert "COULD NOT BUILD" in second
-    assert "tests_ok (set by `run_tests`)" in second
+    # The gate that RAN and failed, distinguished from the one that never ran.
+    assert "gates that RAN AND FAILED: tests_ok (`run_tests`)" in second
+    assert "migration_ok (`sql_exec` was never called)" in second
+    # And the episode is classified as a DESIGN failure, so the Architect is
+    # told to redesign -- which is right here, and is exactly what must NOT
+    # happen when the classification is `infrastructure`.
+    assert report["classification"] == "design", report["classification_reason"]
+    assert "Read this as a critique of the design" in second
     assert "tombstone gate did not fire" in second, "the assertion never crossed the edge"
 
     # ...and the first Architect turn, which had no failure to answer for, must
@@ -212,6 +219,65 @@ async def test_every_required_artifact_is_written(monkeypatch) -> None:
     for name in ("design.md", "migration.sql", "judge_report.json", "critique.md"):
         assert (iter_dir / name).is_file(), f"missing artifact {name}"
     assert (iter_dir / "full" / "predictions.jsonl").is_file()
+
+
+async def test_the_notebook_carries_every_iteration_but_the_last(monkeypatch) -> None:
+    """The Architect's notebook, through the real graph. See tests/test_critique_recap.py.
+
+    Every earlier iteration appears exactly once, in order, in one file for the
+    whole run. Iteration 4's own critique is NOT in it: the row for iteration i
+    is appended by iteration i+1's Architect, and there is no iteration 5.
+    """
+    await run_scenario("max_iterations", monkeypatch, MAX_ITERATIONS=4)
+
+    notebook = (config.RUNS_DIR / "critique_summary.md").read_text(encoding="utf-8")
+    assert [line[:22] for line in notebook.splitlines() if line.startswith("- ")] == [
+        "- **iteration 1** (cri", "- **iteration 2** (cri", "- **iteration 3** (cri",
+    ]
+    assert "**iteration 4**" not in notebook, "no later turn ran to summarise iteration 4"
+
+
+async def test_the_critique_files_carry_only_their_own_iteration(monkeypatch) -> None:
+    """`critique.md` is what the next Architect opens for iteration i, and the
+    notebook is what it opens for 1..i-1. Mixing them would have the Architect
+    summarising a file that already contains the earlier summaries."""
+    await run_scenario("max_iterations", monkeypatch, MAX_ITERATIONS=4)
+
+    for n in (1, 4):
+        written = (config.RUNS_DIR / f"iter_{n}" / "critique.md").read_text(encoding="utf-8")
+        assert "**iteration" not in written, f"iter_{n}/critique.md carries a recap"
+
+
+async def test_an_unbuilt_iteration_is_recapped_even_though_it_has_no_critique(
+    monkeypatch,
+) -> None:
+    """A failed build never reaches the Judge, so no Critic runs and no critique
+    exists. Without a row of its own that iteration would simply be missing from
+    a numbered history, and a gap reads as a lost record."""
+    await run_scenario("dev_retry_exhaustion", monkeypatch, MAX_ITERATIONS=3)
+
+    assert not (config.RUNS_DIR / "iter_1" / "critique.md").exists()
+    notebook = (config.RUNS_DIR / "critique_summary.md").read_text(encoding="utf-8")
+    assert "**iteration 1** (build failure)" in notebook
+    assert "**iteration 2** (critique)" in notebook
+
+
+async def test_the_same_critique_is_never_recapped_twice(monkeypatch) -> None:
+    """Iteration 1 fails to build, so iteration 2's Architect is handed the same
+    (empty) critique iteration 1's was. Only the build failure may be recorded."""
+    final = await run_scenario("dev_retry_exhaustion", monkeypatch, MAX_ITERATIONS=3)
+
+    recapped = [entry["iteration"] for entry in final["critique_digest"]]
+    assert recapped == sorted(set(recapped)), f"an iteration was recapped twice: {recapped}"
+
+
+async def test_no_notebook_is_written_before_there_is_anything_to_put_in_it(
+    monkeypatch,
+) -> None:
+    """Iteration 1 has nothing before it. An empty file under a header reads as
+    'this was checked and there was nothing', which is a different claim."""
+    await run_scenario("immediate_success", monkeypatch, MAX_ITERATIONS=1)
+    assert not (config.RUNS_DIR / "critique_summary.md").exists()
 
 
 async def test_the_manifest_the_evaluator_read_contains_no_hidden_fields(monkeypatch) -> None:
@@ -452,7 +518,14 @@ async def test_template_is_never_mutated_by_a_run(monkeypatch) -> None:
     before = store.read_text()
     await run_scenario("happy_path", monkeypatch, MAX_ITERATIONS=3)
     assert store.read_text() == before, "the template baseline was modified in place"
-    assert re.search(r"^SCHEMA_VERSION\s*=\s*1", before, re.MULTILINE)
+    # The baseline declares SOME schema generation and it is the same one after
+    # the run as before it. Pinning the literal number would make every
+    # legitimate baseline migration look like a mutation, which is the opposite
+    # of what this test is for.
+    version = re.search(r"^SCHEMA_VERSION\s*=\s*(\d+)", before, re.MULTILINE)
+    assert version, "the baseline must declare a SCHEMA_VERSION"
+    assert re.search(rf"^SCHEMA_VERSION\s*=\s*{version.group(1)}$",
+                     store.read_text(), re.MULTILINE)
 
 
 # ======================================================================

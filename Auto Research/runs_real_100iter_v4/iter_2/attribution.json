@@ -1,0 +1,159 @@
+{
+  "current_mgs": 0.388889,
+  "mgs_if_perfect": {
+    "U": 1.0,
+    "A": 0.388889,
+    "F": 0.388889
+  },
+  "marginal": {
+    "U": 0.611111,
+    "A": 0.0,
+    "F": 0.0
+  },
+  "ranked": [
+    "U",
+    "A",
+    "F"
+  ],
+  "dominant_term": "U",
+  "dominant_gain": 0.611111,
+  "raw": {
+    "U": 0.3888888888888889,
+    "A": 0.0,
+    "F": 0.0
+  },
+  "regression": {
+    "verdict": "tied",
+    "iteration": 2,
+    "champion_iteration": 1,
+    "champion_mgs": 0.388889,
+    "current_mgs": 0.388889,
+    "delta": 0.0,
+    "streak": 1,
+    "terms": {
+      "baseline_iteration": 1,
+      "current_iteration": 2,
+      "baseline_mgs": 0.388889,
+      "current_mgs": 0.388889,
+      "delta_mgs": 0.0,
+      "moved": {
+        "U": 0.0,
+        "A": 0.0,
+        "F": 0.0
+      },
+      "delta_mgs_from": {
+        "U": 0.0,
+        "A": 0.0,
+        "F": 0.0
+      },
+      "interaction": 0.0,
+      "ranked_worst_first": [
+        "U",
+        "A",
+        "F"
+      ],
+      "worst_term": "U",
+      "worst_delta": 0.0
+    }
+  },
+  "verdict_vs_best": "tied",
+  "component": "sanitize_and_decide / memory_system/agent.py (dead query_answer_denials branch)",
+  "proposals": [
+    {
+      "component": "sanitize_and_decide / memory_system/agent.py",
+      "kind": "design",
+      "change": "Consume Decision.query_answer_denials: replace `withheld = len(decision.denied_rbac) + len(decision.denied_scope)` with `qad = decision.query_answer_denials; withheld = qad if qad is not None else len(decision.denied_rbac) + len(decision.denied_scope)`, so an incidental denial (only digit-run / contact-tag overlap) no longer demotes a complete answer to answer_redacted. Preserves the pinned tests because a denial with real content overlap still increments query_answer_denials.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_005_behavioral_bridge_deleted_blue_cedar_contact_ckpt_04",
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04"
+      ]
+    },
+    {
+      "component": "count gate-0/rank overlap candidates-per-query in retrieve() debug output (memory_system/store.py, memory_system/agent.py)",
+      "kind": "design",
+      "change": "Before the change that enters the budget, emit per-query diagnostics: total responsive candidates, and how many were cut solely by the top_k stop, so the content-missing cluster is disambiguated into (gate-0 no-match) vs (ranked past top 8) instead of being guessed at.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_015_ms_relapse_deleted_cedar_bridge_line_ckpt_08",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ]
+    },
+    {
+      "component": "memory_system/store.py _distinctive_terms digit-run emission",
+      "kind": "design",
+      "change": "Emit single-digit runs that adjoin a time separator (e.g. re.findall(r'(?<!\\d)\\d(?=:)', text)) in addition to runs of length>=2, so date/time tokens like '2:00 PM', '7:15 PM', '1:00 PM' are recallable by their bare digits on both ingest and query; index is keyed digests so this widens candidacy only, never release.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_015_ms_relapse_deleted_cedar_bridge_line_ckpt_08"
+      ]
+    },
+    {
+      "component": "tombstone contract (retrieve _is_responsive fail-open + sanitize_and_decide branch 1)",
+      "kind": "design",
+      "change": "No component-level change is safe: real-overlap rescoring of tombstones fails test_a_tombstoned_record_is_assumed_responsive. Flag to the mandate level that 4 U checkpoints are being sacrificed for F protection that currently measures F=0.0000 (no realized attacks). Requires re-scoping the tombstone-responsiveness contract, not a code edit.",
+      "expected_fixes": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_09",
+        "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_13",
+        "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_22",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16"
+      ]
+    }
+  ],
+  "regression_verdict": "not_the_cause",
+  "regression_cause": "The iteration tied (U 0.3889 -> 0.3889) rather than regressed; it failed to buy anything because the Mechanism-3 label fix it shipped is dead code -- Decision.query_answer_denials is computed in store.py but never read by sanitize_and_decide in agent.py, which still keys answer_redacted on the raw length of the denial lists, leaving the two wrong_action_shape checkpoints (005/ckpt_04, 010/ckpt_04) and the content-missing cluster unfixed.",
+  "observed_mechanisms": [
+    "answered_but_content_missing",
+    "evidence_withheld",
+    "wrong_action_shape"
+  ],
+  "mechanisms": [
+    {
+      "name": "wrong_action_shape",
+      "component": "sanitize_and_decide, memory_system/agent.py branch 3 (keys on len(denied) lists, ignores Decision.query_answer_denials)",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_005_behavioral_bridge_deleted_blue_cedar_contact_ckpt_04",
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04"
+      ]
+    },
+    {
+      "name": "answered_but_content_missing",
+      "component": "gate-0 term matching and (overlap, structural, seq) top_k budget, retrieve()/store.py",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+        "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+        "med_episode_rewrite_en_015_ms_relapse_deleted_cedar_bridge_line_ckpt_08",
+        "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+        "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+      ]
+    },
+    {
+      "name": "evidence_withheld",
+      "component": "tombstone fail-open in _is_responsive (returns _DEFAULT_OVERLAP) x sanitize_and_decide branch 1 (touched_deleted -> no_memory)",
+      "kind": "design",
+      "checkpoint_ids": [
+        "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_09",
+        "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_13",
+        "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_22",
+        "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16"
+      ]
+    }
+  ],
+  "evidence_checkpoint_ids": [
+    "med_episode_rewrite_en_005_behavioral_bridge_deleted_blue_cedar_contact_ckpt_04",
+    "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_04",
+    "med_episode_rewrite_en_010_breast_biopsy_deleted_maple_house_line_ckpt_09",
+    "med_episode_rewrite_en_011_first_seizure_deleted_harbor_steps_line_ckpt_05",
+    "med_episode_rewrite_en_013_ibd_deleted_pine_harbor_line_ckpt_09",
+    "med_episode_rewrite_en_015_ms_relapse_deleted_cedar_bridge_line_ckpt_08",
+    "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_13",
+    "med_episode_rewrite_en_017_melanoma_deleted_harbor_guest_line_ckpt_22",
+    "med_episode_rewrite_en_019_ascites_deleted_juniper_house_line_ckpt_16",
+    "med_episode_rewrite_en_020_anemia_deleted_river_house_line_ckpt_10",
+    "med_episode_rewrite_en_021_gender_clinic_deleted_harbor_bridge_line_ckpt_03"
+  ]
+}

@@ -602,6 +602,32 @@ JUDGE_TRANSPORT: str = _env("JUDGE_TRANSPORT", "dsh")  # dsh | http
 # the LLM pass is what catches a paraphrased leak.
 USE_LLM_JUDGE: bool = _env_bool("USE_LLM_JUDGE", True)
 
+# Which scoring rules the Judge uses.
+#
+#   "gatemem" (default) -- `nodes/judge_gatemem.py`: GateMem's own matcher
+#       (bench/eval/metrics.pattern_hits) and GateMem's own authority model,
+#       where the LLM judge is PRIMARY for utility and the rule pass is
+#       auxiliary, exactly as bench/eval/scorer.py's docstring says it should
+#       be.  Leaks remain monotone-worse.
+#   "legacy" -- the rules `nodes/judge.py` grew on its own: a bare
+#       `re.search` over `answer` alone, binding, with the LLM able only to
+#       downgrade it.
+#
+# The default changed to "gatemem" because "legacy" is what froze
+# runs_real_100iter_v4: four of its six utility "failures" at iteration 20
+# were answers that already contained every required fact in a different word
+# order, so the loop spent nine iterations rewriting a retrieval layer that
+# was working.  Set "legacy" to reproduce a pre-change run exactly.
+JUDGE_IMPL: str = _env("JUDGE_IMPL", "gatemem")  # gatemem | legacy
+
+# GateMem's end-to-end leak definition also scans the memory context that was
+# exposed TO the answer model, so a leak that reached the prompt counts even if
+# the model did not repeat it.  Off by default: predictions written before
+# `memory_audit` existed carry no context to scan, so enabling it mid-run would
+# move A and F for reasons unrelated to the system under test.  It can only
+# make those two terms worse, never better.
+JUDGE_SCORE_PROMPT_CONTEXT: bool = _env_bool("JUDGE_SCORE_PROMPT_CONTEXT", False)
+
 
 # ==========================================================================
 # 7. Budget guard  (brief section 7, final bullet)

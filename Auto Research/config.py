@@ -914,6 +914,11 @@ class RouteConfig:
     api_key_env: str
     max_concurrency: int
     extra_headers: dict[str, str] = field(default_factory=dict)
+    # Whether this route is a vLLM server, and so gets `chat_template_kwargs`.
+    # Declared rather than inferred from the literal name "vllm", because a
+    # Judge on the `openai` route can point at a local vLLM too (see
+    # openai_route), and a name check silently skipped its thinking-disable.
+    is_vllm: bool = False
 
 
 def openrouter_route() -> RouteConfig:
@@ -936,6 +941,7 @@ def vllm_route() -> RouteConfig:
         base_url=VLLM_BASE_URL,
         api_key_env=VLLM_API_KEY_ENV,
         max_concurrency=VLLM_MAX_CONCURRENCY,
+        is_vllm=True,
     )
 
 
@@ -945,4 +951,12 @@ def openai_route() -> RouteConfig:
         base_url=OPENAI_BASE_URL,
         api_key_env=OPENAI_API_KEY_ENV,
         max_concurrency=JUDGE_MAX_CONCURRENCY,
+        # OPENAI_BASE_URL pointed at a local vLLM is how a local Judge is wired
+        # (scripts/serve/serve_judge.sh). Without this the thinking-disable is
+        # never sent and a Qwen judge reasons at its default effort on every
+        # checkpoint.
+        is_vllm=_env_bool(
+            "OPENAI_ROUTE_IS_VLLM",
+            not OPENAI_BASE_URL.startswith(("https://api.openai.com", "https://openrouter.ai")),
+        ),
     )

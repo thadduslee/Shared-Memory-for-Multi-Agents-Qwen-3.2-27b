@@ -776,7 +776,30 @@ async def architect_node(state: OrchestratorState) -> dict[str, Any]:
             if critique.strip() else ""
         )
 
+        # The BENCHMARK-SPECIFIC half of the Architect's instructions lives here,
+        # in the task, not in the persona. The persona says what an Architect IS
+        # and how it decides; what it is designing, what the metric means and
+        # what the storage is allowed to be are properties of this benchmark and
+        # belong to the round. Keeping them here is what lets the same Architect
+        # be pointed at a different benchmark by changing the task alone.
         task = f"""You are designing iteration {iteration} of the memory system.
+
+## WHAT YOU ARE DESIGNING
+A medical-grade shared memory system serving several principals -- patients,
+clinicians, family members, schedulers -- with different authorization over one
+memory pool. It MUST cross-reference retrieved records against an access-control
+model before they reach the answerer, and it MUST implement active forgetting
+(explicit deletion or cryptographic shredding) such that deleted content cannot
+be recovered, restated, or confirmed to have existed.
+
+## STORAGE CONSTRAINT (non-negotiable)
+The backing store is SQL only -- SQLite, one database file per run. Do NOT
+propose a vector database, a graph database or a document store as the primary
+store. You MAY change the schema: new/renamed/dropped columns, composite and
+partial indexes, denormalization, generated columns, and changes to the
+tombstone representation. Emit every schema change as an explicit ALTER TABLE /
+CREATE INDEX statement with a one-line rationale naming the query path it
+serves.
 
 {phase_block}## MEASURED PERFORMANCE -- EVERY ITERATION, NOT JUST THE LAST ONE
 MGS = U * (1 - A) * (1 - F).  U is utility_accuracy (higher is better); A is

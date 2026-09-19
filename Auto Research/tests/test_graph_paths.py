@@ -415,21 +415,30 @@ def test_the_developer_is_advertised_exactly_its_own_toolbox() -> None:
         assert hasattr(DevToolbox, f"_t_{name}"), f"{name} is advertised but not implemented"
 
 
-def test_developer_persona_names_exactly_the_tools_that_exist() -> None:
-    """The persona is the Developer's tool NARRATIVE -- so it must still be true.
+def test_developer_prompts_name_exactly_the_tools_that_exist() -> None:
+    """The Developer's tool NARRATIVE must still be true, wherever it is written.
 
-    The schema is what the model calls against, so a drifted persona is no
-    longer a fatal one. It is still a misleading one: the persona is where the
-    tools are given their job (which two are advisory, which one is for new
-    files and which for edits), and a name mentioned there that does not exist
-    sends the model looking for it.
+    The schema is what the model calls against, so drifted prose is no longer a
+    fatal fault. It is still a misleading one: the prose is where the tools are
+    given their job (which are advisory, which one is for new files and which
+    for edits), and a name mentioned there that does not exist sends the model
+    looking for it.
+
+    CHECKED ACROSS BOTH LAYERS, because they are deliberately split: the persona
+    carries what a Developer IS and the rules it works under, and the task
+    carries what is true of THIS benchmark -- which tools are the gates here,
+    and which fields are this evaluation's answer key. `sql_exec` is a gate for
+    a SQL-backed target and would not exist for another one, so it belongs to
+    the task. What must hold is that every tool is described SOMEWHERE.
     """
     from harness.profiles import DEVELOPER_PROFILE
+    from nodes.developer import BENCHMARK_TOOL_NOTE
     from nodes.dev_tools import TOOL_NAMES
 
     persona = DEVELOPER_PROFILE.system_prompt
+    prose = persona + BENCHMARK_TOOL_NOTE
     for tool in TOOL_NAMES:
-        assert tool in persona, f"{tool} exists but the persona never mentions it"
+        assert tool in prose, f"{tool} exists but neither the persona nor the task names it"
     # The names the harness-native surface would have used, which the model
     # reached for when both toolboxes were live.
     for ghost in ("read_file", "list_dir", "write_file"):

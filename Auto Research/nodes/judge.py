@@ -38,11 +38,11 @@ its score on those checkpoints, not crash the research loop at hour six.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import logging
-from collections import Counter
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -166,9 +166,35 @@ def rule_score(prediction: dict[str, Any], annotation: dict[str, Any]) -> dict[s
 
 
 async def _llm_verdict(
-    prediction: dict[str, Any], annotation: dict[str, Any], rule: dict[str, Any]
+    prediction: dict[str, Any],
+    annotation: dict[str, Any],
+    rule: dict[str, Any],
+    visible: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, int]]:
     profile = JUDGE_PROFILE
+
+    # GATEMEM'S OWN judge_prompt.txt, and this is the default.
+    #
+    # The Judge is the benchmark's scoring instrument. Scoring with wording of
+    # ours means reporting a number against an instrument we modified, which is
+    # comparable to nothing in the paper -- so the file is loaded rather than
+    # restated. NOT judge_prompt_gatemem.txt: that is the longer variant, and
+    # mixing the two is comparable to neither.
+    #
+    # Its verdict shape differs in two ways that `normalise_verdict` reconciles:
+    # it returns `notes` rather than `reason`, and it does not score
+    # over-refusal at all, which is taken from the deterministic rule pass so
+    # our OR metric keeps a definition instead of being invented by a model
+    # that was never asked for it.
+    if config.BENCHMARK_PROMPTS == "gatemem":
+        from prompts_gatemem import normalise_verdict, render_judge_prompt
+
+        system_prompt, task = render_judge_prompt(prediction, annotation, visible)
+        if system_prompt:
+            profile = dataclasses.replace(profile, system_prompt=system_prompt)
+        raw, usage = await _dispatch_judge(profile, task)
+        return normalise_verdict(raw, rule), usage
+
     if config.JUDGE_IMPL != "legacy":
         # GateMem's prompt AND GateMem's task text. The shipped prompt tells
         # the model to "judge the text as written" against "include regexes",
@@ -367,6 +393,7 @@ async def judge_node(state: OrchestratorState) -> dict[str, Any]:
 
     async with node_span("judge", iteration, phase, stage=stage) as span:
         dataset = get_dataset()
+        visible_checkpoints = {cp["checkpoint_id"]: cp for cp in dataset.checkpoints}
         annotations = dataset.annotations_by_id()
         predictions, malformed = _load_predictions(Path(state.get("predictions_path") or ""))
 
@@ -396,7 +423,13 @@ async def judge_node(state: OrchestratorState) -> dict[str, Any]:
         usages: list[dict[str, int]] = []
         if config.USE_LLM_JUDGE and rule_verdicts:
             tasks = [
-                _llm_verdict(predictions[cid], annotations[cid], rule_verdicts[cid])
+                _llm_verdict(
+                    predictions[cid], annotations[cid], rule_verdicts[cid],
+                    # The visible half of the checkpoint: what the agent under
+                    # test also saw. GateMem's judge prompt shows it alongside
+                    # the hidden spec; see prompts_gatemem.render_judge_prompt.
+                    visible_checkpoints.get(cid),
+                )
                 for cid in rule_verdicts
             ]
             # `return_exceptions=True`: one judge call failing must degrade that

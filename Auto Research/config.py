@@ -320,6 +320,18 @@ VLLM_MAX_CONCURRENCY: int = _env_int("VLLM_MAX_CONCURRENCY", 12)  # ~2 in-flight
 OPENROUTER_MAX_CONCURRENCY: int = _env_int("OPENROUTER_MAX_CONCURRENCY", 4)
 JUDGE_MAX_CONCURRENCY: int = _env_int("JUDGE_MAX_CONCURRENCY", 4)
 
+# How many checkpoints the Critic is shown in full -- id, action, answer and
+# retrieval counters -- as citable evidence.
+#
+# It was 12, hardcoded, out of 579 evaluated and ~100 failing, ranked by
+# severity. Because the mechanism buckets are computed over ALL failures, the
+# largest bucket routinely had no examples among those 12, and a Critic
+# instructed to support claims with evidence stood down on exactly the finding
+# worth the most. 40 gives every mechanism room for examples without turning the
+# prompt into a data dump; the evidence is stratified per bucket, so the number
+# bounds breadth rather than depth.
+CRITIC_EVIDENCE_MAX: int = _env_int("CRITIC_EVIDENCE_MAX", 40)
+
 HTTP_MAX_CONNECTIONS: int = _env_int("HTTP_MAX_CONNECTIONS", 64)
 HTTP_MAX_KEEPALIVE: int = _env_int("HTTP_MAX_KEEPALIVE", 16)
 HTTP_TIMEOUT_S: float = _env_float("HTTP_TIMEOUT_S", 120.0)
@@ -345,7 +357,18 @@ HTTP_RETRY_AFTER_MAX_S: float = _env_float("HTTP_RETRY_AFTER_MAX_S", 180.0)
 
 # Path to a GateMem checkout.  The medical domain lives at
 # {GATEMEM_REPO}/bench/data/medical/{episodes,checkpoints}.jsonl
-GATEMEM_REPO: Final[Path] = Path(_env("GATEMEM_REPO", str(Path.home() / "GateMem"))).expanduser()
+# Defaults to the checkout this package sits inside when that one HAS a bench/,
+# before falling back to ~/GateMem. The orchestrator now loads GateMem's own
+# prompt files as well as its data, so pointing at a tree without bench/ fails
+# later and further from the cause than it needs to.
+_VENDORED_GATEMEM = PROJECT_ROOT.parent
+GATEMEM_REPO: Final[Path] = Path(
+    _env(
+        "GATEMEM_REPO",
+        str(_VENDORED_GATEMEM if (_VENDORED_GATEMEM / "bench").is_dir()
+            else Path.home() / "GateMem"),
+    )
+).expanduser()
 GATEMEM_DOMAIN: Final[str] = "medical"
 GATEMEM_DATA_DIR: Final[Path] = GATEMEM_REPO / "bench" / "data" / GATEMEM_DOMAIN
 
@@ -642,6 +665,26 @@ USE_LLM_JUDGE: bool = _env_bool("USE_LLM_JUDGE", True)
 # order, so the loop spent nine iterations rewriting a retrieval layer that
 # was working.  Set "legacy" to reproduce a pre-change run exactly.
 JUDGE_IMPL: str = _env("JUDGE_IMPL", "gatemem")  # gatemem | legacy
+
+# The Evaluator and the Judge run GateMem's OWN prompt files, not wording of
+# ours: the Evaluator is the system under test as the benchmark defines it and
+# the Judge is its scoring instrument, so a prompt we wrote would silently
+# redefine the measurement and make the numbers incomparable with the paper.
+#
+# Empty = the file shipped in the GateMem checkout:
+#   bench/prompts/query_prompt.txt   -> Evaluator
+#   bench/prompts/judge_prompt.txt   -> Judge
+#
+# NOT judge_prompt_gatemem.txt, which is the longer variant; this project scores
+# against judge_prompt.txt and mixing them is comparable to neither. Set either
+# path to substitute your own file; see prompts_gatemem.py.
+EVALUATOR_PROMPT_FILE: str = _env("EVALUATOR_PROMPT_FILE", "")
+JUDGE_PROMPT_FILE: str = _env("JUDGE_PROMPT_FILE", "")
+
+# Which prompt the two benchmark-facing nodes use. `gatemem` loads the files
+# above; `local` keeps this project's hand-written prompts, which score higher
+# and mean less.
+BENCHMARK_PROMPTS: str = _env("BENCHMARK_PROMPTS", "gatemem")  # gatemem | local
 
 # GateMem's end-to-end leak definition also scans the memory context that was
 # exposed TO the answer model, so a leak that reached the prompt counts even if

@@ -509,6 +509,47 @@ def _failure_bucket_table(report: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _stratified_evidence(
+    offenders: list[dict[str, Any]],
+    report: dict[str, Any],
+    dominant: str,
+) -> list[dict[str, Any]]:
+    """Cited checkpoints, sampled ACROSS failure mechanisms rather than ranked.
+
+    Every mechanism the judge counted gets examples in proportion to its size,
+    largest first, so the Critic can cite the finding that matters instead of
+    only the findings that happened to sort highest. Offenders belonging to no
+    bucket (privacy and safety failures, which the utility buckets do not
+    cover) backfill the remainder, biased toward the dominant term.
+    """
+    buckets = (report.get("utility_failure_buckets") or {})
+    by_checkpoint = buckets.get("by_checkpoint") or {}
+    counts = buckets.get("counts") or {}
+    by_id = {o["checkpoint_id"]: o for o in offenders}
+
+    picked: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    if counts and by_checkpoint:
+        total = sum(counts.values()) or 1
+        for name, count in sorted(counts.items(), key=lambda kv: -kv[1]):
+            # At least one example per mechanism, then proportional. A mechanism
+            # with a single example is still a mechanism the Architect can act
+            # on; a mechanism with none is one it will never hear about.
+            quota = max(1, round(config.CRITIC_EVIDENCE_MAX * count / total))
+            members = [cid for cid, b in by_checkpoint.items() if b == name]
+            for cid in members[:quota]:
+                if cid in seen:
+                    continue
+                seen.add(cid)
+                picked.append(by_id.get(cid) or {"checkpoint_id": cid, "mechanism": name})
+
+    term_to_type = {"U": "utility", "A": "privacy", "F": "safety"}
+    rest = [o for o in offenders if o["checkpoint_id"] not in seen]
+    rest.sort(key=lambda o: o.get("query_type") != term_to_type.get(dominant))
+    picked.extend(rest[: max(0, config.CRITIC_EVIDENCE_MAX - len(picked))])
+    return picked[: config.CRITIC_EVIDENCE_MAX]
+
+
 async def critic_node(state: OrchestratorState) -> dict[str, Any]:
     iteration = int(state.get("iteration_count", 1))
     phase = str(state.get("current_curriculum_phase") or "")
@@ -552,11 +593,22 @@ async def critic_node(state: OrchestratorState) -> dict[str, Any]:
             for o in (report.get("worst_offenders") or [])
             if isinstance(o, dict)
         ]
-        # Bias the cited evidence toward the dominant term so the Architect gets
-        # checkpoint ids that are actually about the thing being fixed.
-        term_to_type = {"U": "utility", "A": "privacy", "F": "safety"}
-        relevant = [o for o in offenders if o.get("query_type") == term_to_type.get(dominant)]
-        cited = (relevant or offenders)[:12]
+        # STRATIFIED, NOT TOP-N, and this is the fix for a measured failure.
+        #
+        # This used to be `(relevant or offenders)[:12]`: twelve checkpoints out
+        # of 579 evaluated and ~100 failing, ranked by severity. The mechanism
+        # buckets are computed over ALL failures, so the largest bucket
+        # routinely had zero examples among those twelve -- and the Critic, told
+        # by its own instructions that a claim needs evidence, correctly stood
+        # down on it. Verbatim, from runs_fresh40 iteration 4:
+        #
+        #   "I cannot cite IDs for `suppressed_by_tombstone` because none are
+        #    provided in the 'FAILING CHECKPOINTS' list. Therefore, I must name
+        #    a measured reason not to prioritize it."
+        #
+        # 53 of 101 failures, unciteable, so unactionable. Sampling per bucket
+        # guarantees the biggest mechanism arrives with examples attached.
+        cited = _stratified_evidence(offenders, report, dominant)
 
         by_attack = report.get("by_attack_type") or {}
         worst_attacks = sorted(

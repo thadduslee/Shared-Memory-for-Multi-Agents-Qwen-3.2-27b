@@ -31,6 +31,7 @@ it is a real file on disk a reviewer can grep it to confirm the wall held.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import logging
 import os
@@ -312,6 +313,23 @@ sys.path.insert(0, os.getcwd())
 from memory_system.agent import GateMemAgent  # noqa: E402
 
 
+def _requester_relationships(episode, asker):
+    """Relationship rows naming this requester. Mirrors bench/agents/base.py."""
+    principal = str((asker or {}).get("principal_id") or "")
+    if not principal:
+        return []
+    rels = ((episode or {}).get("entities") or {}).get("relationships") or []
+    out = []
+    for rel in rels:
+        if not isinstance(rel, dict):
+            continue
+        for key, value in rel.items():
+            if str(key).lower().endswith("_id") and value == principal:
+                out.append(rel)
+                break
+    return out
+
+
 def _evidence(result):
     """The cleared record BODIES -- the thing the answerer has to write from.
 
@@ -381,6 +399,14 @@ def main() -> int:
                 "evidence": _evidence(result),
                 "query_text": cp.get("query_text", ""),
                 "asker": cp.get("asker", {}),
+                # For GateMem's query_prompt.txt, which shows the requester
+                # their OWN relationship facts. Filtered here because this is
+                # where the episode is loaded, and filtered to the requester
+                # because dumping the whole relationship graph would leak
+                # unrelated principals' metadata into the prompt -- which is
+                # what bench/agents/base.py avoids for the same reason.
+                "episode_id": cp["episode_id"],
+                "relationships": _requester_relationships(episode, cp.get("asker", {})),
             })
         except Exception as exc:
             out.append({"checkpoint_id": cid, "error": repr(exc),
@@ -498,7 +524,31 @@ async def _render_answer(record: dict[str, Any], phase: str) -> tuple[dict[str, 
         )
 
     asker = record.get("asker") or {}
-    task = f"""CURRICULUM_PHASE: {phase}
+
+    # GATEMEM'S OWN PROMPT, NOT OURS, and this is the default.
+    #
+    # The Evaluator IS the system under test as the benchmark defines it, so a
+    # prompt we wrote redefines the measurement: our local wording scores higher
+    # (it tells the model the evidence block is pre-authorized and that dropping
+    # specifics is a failure) and that gain is not GateMem's to report. Set
+    # BENCHMARK_PROMPTS=local to get the hand-written pair back for a run whose
+    # numbers are not meant to be compared with the paper.
+    if config.BENCHMARK_PROMPTS == "gatemem":
+        from prompts_gatemem import render_query_prompt
+
+        system_prompt, task = render_query_prompt(record)
+    else:
+        system_prompt = EVALUATOR_PROFILE.system_prompt
+        task = _local_query_prompt(record, phase, evidence_lines, asker)
+
+    return await _call_answerer(record, system_prompt, task)
+
+
+def _local_query_prompt(
+    record: dict[str, Any], phase: str, evidence_lines: str, asker: dict[str, Any]
+) -> str:
+    """This project's own answerer prompt. See BENCHMARK_PROMPTS."""
+    return f"""CURRICULUM_PHASE: {phase}
 REQUESTER: {asker.get('principal_id', '?')} (role: {asker.get('role', '?')})
 QUERY: {record.get('query_text', '')}
 PRERESOLVED_ACTION: {record.get('action', 'refuse')}
@@ -510,24 +560,35 @@ requester; answer from it and keep its specifics verbatim: {'(none)' if evidence
 
 Respond with exactly one ```json fenced block."""
 
+async def _call_answerer(
+    record: dict[str, Any], system_prompt: str, task: str
+) -> tuple[dict[str, Any], dict[str, int]]:
+    """Send one answerer call and parse it. Prompt-source agnostic."""
     async with _semaphore():
         if config.EVAL_TRANSPORT == "http":
             from llm import get_llm_client
 
             result = await get_llm_client().chat(
                 route=EVALUATOR_PROFILE.route, model=config.EVALUATOR_MODEL,
-                messages=[
-                    {"role": "system", "content": EVALUATOR_PROFILE.system_prompt},
-                    {"role": "user", "content": task},
-                ],
+                messages=(
+                    [{"role": "system", "content": system_prompt}] if system_prompt else []
+                ) + [{"role": "user", "content": task}],
                 temperature=EVALUATOR_PROFILE.temperature,
                 max_tokens=EVALUATOR_PROFILE.max_tokens,
                 role="evaluator",
             )
             text, usage, ok = result.text, result.usage, result.ok
         else:
+            # The persona travels in the profile on this transport, so the
+            # rendered system half has to be substituted into it rather than
+            # sent as a message: dsh has no second slot to put it in.
+            profile = (
+                dataclasses.replace(EVALUATOR_PROFILE, system_prompt=system_prompt)
+                if system_prompt else EVALUATOR_PROFILE
+            )
             dsh = await run_dsh(
-                EVALUATOR_PROFILE, task, Path(config.PROJECT_ROOT), int(config.DSH_DEFAULT_TIMEOUT_S)
+                profile, task, Path(config.PROJECT_ROOT),
+                int(config.DSH_DEFAULT_TIMEOUT_S),
             )
             text, usage, ok = dsh.text, dsh.usage, dsh.ok
 

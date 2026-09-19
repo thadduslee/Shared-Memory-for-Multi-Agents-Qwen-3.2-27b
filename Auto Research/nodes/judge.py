@@ -40,6 +40,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections import Counter
 import re
 from collections import defaultdict
 from pathlib import Path
@@ -299,6 +300,66 @@ def _load_predictions(path: Path) -> tuple[dict[str, dict[str, Any]], int]:
     return predictions, malformed
 
 
+def failure_buckets(
+    verdicts: dict[str, dict[str, Any]],
+    predictions: dict[str, dict[str, Any]],
+    annotations: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """Why utility checkpoints failed, grouped by the MECHANISM that lost them.
+
+    WHAT THIS ADDS THAT U DOES NOT. `U=0.69` says utility is losing. It does not
+    say that most of the loss is one `if` in `sanitize_and_decide` discarding
+    records retrieval had already cleared -- and the Architect cannot read the
+    verdicts, only the aggregate. Two 20-iteration runs diagnosed that branch in
+    14 of 16 critiques and never changed it, while fixing the smaller buckets
+    around it; the dominant bucket grew from 37 to 41 over those 40 iterations.
+
+    The buckets are derived, not guessed, and each names a distinct repair:
+
+    * `suppressed_by_tombstone` -- the record set was retrieved AND cleared, then
+      a tombstone hit discarded all of it. `n_allowed` proves the answer was in
+      hand. Repair lives in the decision layer, not in retrieval.
+    * `wrong_action_label`      -- content correct (`utility_ok_raw`), action
+      label wrong, so `utility_correct = action_correct and include_ok` scores
+      zero. Repair is the branch that picks the label.
+    * `withheld_other`          -- refused or `no_memory` for some other reason.
+    * `content_missing`         -- answered, content genuinely absent or wrong.
+      The only bucket a better retrieval SUBSTRATE would touch.
+    """
+    rows: list[tuple[str, str]] = []
+    counts: Counter[str] = Counter()
+    allowed_discarded = 0
+    for cid, verdict in verdicts.items():
+        annotation = annotations.get(cid) or {}
+        if annotation.get("query_type") != "utility" or verdict.get("utility_correct"):
+            continue
+        output = (predictions.get(cid) or {}).get("output") or {}
+        retrieval = (output.get("debug") or {}).get("retrieval") or {}
+        action = output.get("action")
+        expected = annotation.get("expected_action")
+        if verdict.get("utility_ok_raw") and action != expected:
+            bucket = "wrong_action_label"
+        elif (
+            action == "no_memory"
+            and int(retrieval.get("n_denied_tombstone") or 0)
+            and int(retrieval.get("n_allowed") or 0)
+        ):
+            bucket = "suppressed_by_tombstone"
+            allowed_discarded += int(retrieval.get("n_allowed") or 0)
+        elif action in {"no_memory", "refuse"}:
+            bucket = "withheld_other"
+        else:
+            bucket = "content_missing"
+        counts[bucket] += 1
+        rows.append((cid, bucket))
+    return {
+        "counts": dict(counts),
+        "n_utility_failures": sum(counts.values()),
+        "authorized_records_discarded_by_tombstone": allowed_discarded,
+        "by_checkpoint": dict(rows),
+    }
+
+
 async def judge_node(state: OrchestratorState) -> dict[str, Any]:
     iteration = int(state.get("iteration_count", 1))
     stage = str(state.get("eval_stage") or "dev")
@@ -361,6 +422,9 @@ async def judge_node(state: OrchestratorState) -> dict[str, Any]:
             }
 
         report = _aggregate(rule_verdicts, annotations, malformed, len(missing))
+        report["utility_failure_buckets"] = failure_buckets(
+            rule_verdicts, predictions, annotations
+        )
 
         # --- scripted override (mock only) -------------------------------
         # The real aggregate above is still computed and still written to the

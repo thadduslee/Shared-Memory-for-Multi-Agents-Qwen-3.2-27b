@@ -38,7 +38,6 @@ from __future__ import annotations
 
 import logging
 import re
-import json
 from pathlib import Path
 from typing import Any
 
@@ -536,78 +535,6 @@ def _critique_source_iteration(state: OrchestratorState, iteration: int) -> int:
     return recorded or max(0, iteration - 1)
 
 
-_BUCKET_LABELS: dict[str, str] = {
-    "suppressed_by_tombstone":
-        "retrieval CLEARED the records, then a tombstone hit discarded all of them "
-        "(the answer was in hand; the decision layer threw it away)",
-    "wrong_action_label":
-        "content was CORRECT but the action label was wrong, which scores zero "
-        "because utility_correct = action_correct AND include_ok",
-    "withheld_other":
-        "refused or answered no_memory for some other reason",
-    "content_missing":
-        "answered, but the required content was genuinely absent or wrong",
-}
-
-
-def _failure_bucket_block(state: OrchestratorState) -> str:
-    """The utility failures grouped by MECHANISM, not by metric.
-
-    WHY THIS BLOCK EXISTS. The trend table says which TERM is losing; it cannot
-    say which LINE loses it. Across two 20-iteration runs the Critic named the
-    tombstone branch in 14 of 16 critiques and the Architect never changed it,
-    spending its iterations on the smaller buckets instead -- while the dominant
-    bucket grew from 37 failures to 41. The diagnosis was being made and not
-    acted on, so the missing input was not analysis but ATTRIBUTION AT THE SCALE
-    OF A REPAIR: how many checkpoints one branch is worth.
-
-    Falls back to ARCHITECT_SEED_FAILURE_BUCKETS on the first iteration, which
-    has no judged report of its own yet but inherits a seeded workspace whose
-    failures were measured by the run that produced it.
-    """
-    buckets = ((state.get("judge_report") or {}).get("utility_failure_buckets") or {})
-    counts = dict(buckets.get("counts") or {})
-    discarded = int(buckets.get("authorized_records_discarded_by_tombstone") or 0)
-    source = "THIS iteration's judged run"
-
-    if not counts and config.ARCHITECT_SEED_FAILURE_BUCKETS:
-        try:
-            seed = json.loads(Path(config.ARCHITECT_SEED_FAILURE_BUCKETS).read_text("utf-8"))
-            counts = dict(seed.get("counts") or {})
-            discarded = int(seed.get("authorized_records_discarded_by_tombstone") or 0)
-            source = str(seed.get("source") or "the run that produced this workspace")
-        except (OSError, ValueError, TypeError) as exc:
-            log.warning("seed failure buckets unreadable (%s); omitting the block", exc)
-            return ""
-    if not counts:
-        return ""
-
-    total = sum(counts.values())
-    lines = [
-        "\n## WHY THE UTILITY CHECKPOINTS FAILED -- BY MECHANISM",
-        f"Measured from {source}: {total} utility checkpoints failed. Grouped by the",
-        "mechanism that lost them, because each group names a DIFFERENT repair:\n",
-    ]
-    for name, count in sorted(counts.items(), key=lambda kv: -kv[1]):
-        share = 100.0 * count / total if total else 0.0
-        lines.append(f"  {count:4}  ({share:4.1f}%)  {name}")
-        lines.append(f"        {_BUCKET_LABELS.get(name, '')}")
-    if discarded:
-        lines.append(
-            f"\nIn the `suppressed_by_tombstone` group, {discarded} records that were "
-            "retrieved,\nRBAC-cleared and authorized for the requester were discarded "
-            "before the\nanswerer ever saw them."
-        )
-    lines.append(
-        "\nREAD THIS AGAINST THE TREND TABLE. The table says which TERM is losing; "
-        "this\nsays which MECHANISM loses it. The largest group is the one worth the "
-        "most\nMGS, and it is not necessarily the one the critique spends the most "
-        "words on.\nIf you do not target the largest group, say why -- a reason that "
-        "names a\nmeasured risk is a good reason; not having noticed it is not."
-    )
-    return "\n".join(lines) + "\n"
-
-
 def _recap_additions(
     state: OrchestratorState, block: dict[str, Any], iteration: int, critique: str
 ) -> list[dict[str, Any]]:
@@ -794,7 +721,6 @@ async def architect_node(state: OrchestratorState) -> dict[str, Any]:
         # path `critique` is stale (or empty) and this block is the ONLY
         # feedback about the iteration that just failed.
         dev_failure = _developer_failure_block(state)
-        bucket_block = _failure_bucket_block(state)
         # Omitted entirely when the curriculum is off: naming a phase the run is
         # not actually gated on tells the model to design for a slice instead of
         # for the benchmark. See config.CURRICULUM_ENABLED.
@@ -864,7 +790,7 @@ READ THE TABLE BEFORE YOU DESIGN. A design that targets the same term the last
 three iterations targeted, when all three lost MGS, is the fourth iteration of
 a strategy that has already been measured as wrong. The delta column is the
 only evidence you have about whether your previous designs worked.
-{bucket_block}{dev_failure}{feedback_block}{notebook_block}
+{dev_failure}{feedback_block}{notebook_block}
 ## PRIOR ART (from web search -- cite what you use)
 {prior_art}
 

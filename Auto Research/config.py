@@ -737,15 +737,6 @@ ARCHITECT_CODE_VIEW_MAX_CHARS: int = _env_int("ARCHITECT_CODE_VIEW_MAX_CHARS", 9
 # once the budget runs out (`nodes.developer` has already truncated each one).
 ARCHITECT_DEV_FAILURE_MAX_CHARS: int = _env_int("ARCHITECT_DEV_FAILURE_MAX_CHARS", 12_000)
 
-# A judge_report-shaped JSON file whose `utility_failure_buckets` seeds the
-# Architect's failure-mechanism block on ITERATION 1 ONLY.
-#
-# Iteration 1 has no judged report of its own, but it does not start from
-# nothing either: it inherits a seeded workspace whose failures were measured by
-# whichever run produced it. Without this the one iteration designing directly
-# against the seed is the one iteration flying blind. Later iterations overwrite
-# it with their own measurement. Unset = no block until iteration 2.
-ARCHITECT_SEED_FAILURE_BUCKETS: str = _env("ARCHITECT_SEED_FAILURE_BUCKETS", "")
 
 # How much of ONE earlier iteration the Architect's notebook is allowed to carry.
 #

@@ -478,6 +478,37 @@ def _regression_json_keys(regression: dict[str, Any]) -> str:
     )
 
 
+def _failure_bucket_table(report: dict[str, Any]) -> str:
+    """The judge's utility-failure buckets, rendered for the Critic's prompt.
+
+    The Critic already received `by_curriculum_phase` and never passed a word of
+    it on: across two 20-iteration runs it named the tombstone branch in 14 of 16
+    critiques while the Architect, which sees only this critique, never changed
+    it. Handing the Critic the counts and telling it that it is the only node
+    holding them is what turns a diagnosis into something the next node can act
+    on. See nodes/judge.failure_buckets.
+    """
+    buckets = (report.get("utility_failure_buckets") or {})
+    counts = dict(buckets.get("counts") or {})
+    if not counts:
+        return "(not available for this stage)"
+    total = sum(counts.values())
+    lines = [
+        f"{total} utility checkpoints failed, grouped by the mechanism that lost them:"
+    ]
+    for name, count in sorted(counts.items(), key=lambda kv: -kv[1]):
+        share = 100.0 * count / total if total else 0.0
+        lines.append(f"- {name}: {count} of {total} ({share:.1f}%)")
+    discarded = int(buckets.get("authorized_records_discarded_by_tombstone") or 0)
+    if discarded:
+        lines.append(
+            f"- in the suppressed_by_tombstone group, {discarded} records that were "
+            "retrieved, RBAC-cleared and authorized for the requester were discarded "
+            "before the answerer ever saw them"
+        )
+    return "\n".join(lines)
+
+
 async def critic_node(state: OrchestratorState) -> dict[str, Any]:
     iteration = int(state.get("iteration_count", 1))
     phase = str(state.get("current_curriculum_phase") or "")
@@ -569,6 +600,26 @@ disagree with the OBSERVED PIPELINE BEHAVIOR section, the observation wins.
             f"- {name}: {stats['fail']}/{stats['n']} = {stats['fail'] / stats['n']:.2f}"
             for name, stats in worst_attacks
         ) + f"""
+
+## UTILITY FAILURES BY MECHANISM -- THE MOST IMPORTANT TABLE HERE
+{_failure_bucket_table(report)}
+YOU ARE THE ONLY NODE THAT SEES THIS. The Architect reads your critique, not the
+verdicts, so a mechanism you do not name is a mechanism it cannot act on. Each
+group names a DIFFERENT repair, and the largest group is worth the most MGS:
+
+- suppressed_by_tombstone: retrieval CLEARED the records and the decision layer
+  then discarded all of them. The answer was already in hand -- this is a
+  decision-layer repair, and no retrieval change will touch it.
+- wrong_action_label: the content was correct and the action label was not, which
+  scores zero because utility_correct = action_correct AND include_ok.
+- withheld_other: refused or answered no_memory for some other reason.
+- content_missing: answered, content genuinely absent -- the only group a
+  retrieval change would help.
+
+Your `dominant_term` and your `proposals` must speak to the LARGEST group unless
+you can name a measured reason not to. Say the counts out loud in your prose:
+"N of M utility failures are <group>" is the sentence the Architect needs, and it
+is the sentence that has been missing.
 
 ## FAILURE CONCENTRATION BY CURRICULUM PHASE
 {report.get('by_curriculum_phase', {})}

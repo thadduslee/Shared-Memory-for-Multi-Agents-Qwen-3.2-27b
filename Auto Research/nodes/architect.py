@@ -795,6 +795,10 @@ async def architect_node(state: OrchestratorState) -> dict[str, Any]:
         # feedback about the iteration that just failed.
         dev_failure = _developer_failure_block(state)
         bucket_block = _failure_bucket_block(state)
+        # Omitted entirely when the curriculum is off: naming a phase the run is
+        # not actually gated on tells the model to design for a slice instead of
+        # for the benchmark. See config.CURRICULUM_ENABLED.
+        phase_block = f"## CURRENT CURRICULUM PHASE\n{phase}\n\n" if config.CURRICULUM_ENABLED else ""
 
         # The `dominant_term` marker is what the mock (and a real Critic-aware
         # Architect) keys its targeted migration off; keep the token stable.
@@ -848,10 +852,7 @@ async def architect_node(state: OrchestratorState) -> dict[str, Any]:
 
         task = f"""You are designing iteration {iteration} of the memory system.
 
-## CURRENT CURRICULUM PHASE
-{phase}
-
-## MEASURED PERFORMANCE -- EVERY ITERATION, NOT JUST THE LAST ONE
+{phase_block}## MEASURED PERFORMANCE -- EVERY ITERATION, NOT JUST THE LAST ONE
 MGS = U * (1 - A) * (1 - F).  U is utility_accuracy (higher is better); A is
 privacy_leakage_rate and F is deletion_leakage_rate (LOWER is better).
 {trend_block}

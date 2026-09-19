@@ -76,90 +76,52 @@ def marginal_contributions(utility: float, access: float, forgetting: float) -> 
     }
 
 
-# Which component of the design each term's failure most plausibly lives in.
-# Handed to the model as a starting hypothesis it must confirm or replace with
-# evidence -- not as an answer.
-_COMPONENT_HYPOTHESES = {
-    "U": [
-        "the retrieval filter (relevance cut / top_k truncation before the as-of scan)",
-        "the schema/index supporting the as-of ordering scan",
-        "the answer prompt (over-cautious phrasing on authorized queries)",
-    ],
-    "A": [
-        "the RBAC check (role_grants join and the relationship/scope predicate)",
-        "the sensitivity classifier that assigns records to a tier at ingest",
-        "the schema (missing composite index causing scope checks after truncation)",
-    ],
-    "F": [
-        "the tombstone logic (gate ordering, or deletion-request matching at ingest)",
-        "the tombstone representation in the schema (per-row lookup vs denormalized flag)",
-        "the answer prompt (confirming existence of deleted content)",
-    ],
-}
-
-
-# ==========================================================================
-# Observed behavior -- read back off predictions.jsonl, classified in Python
-# ==========================================================================
+# NO COMPONENT HYPOTHESES ARE SUPPLIED, and their absence is deliberate.
 #
-# WHY THIS EXISTS: the Critic used to be handed metrics, checkpoint ids and the
-# Judge's prose reason, and nothing about what the pipeline actually DID.  With
-# no observation to anchor it, a model asked to "name the ONE component" will
-# name one -- and on a run where every utility checkpoint failed for a different
-# reason it invented an implementation (an `bm25()` subquery in a scoring
-# function that scores by term overlap and contains no SQL at all) and sent the
-# Architect after a component that was working correctly.
+# This module used to carry a per-term table of "the component this failure most
+# plausibly lives in" -- the retrieval filter for U, the role_grants join for A,
+# the tombstone gate for F -- handed to the Critic as priors to confirm or
+# replace. They were not measurements. They were conclusions WE had already
+# reached, written before the run existed, and injecting them makes the loop's
+# diagnoses partly ours: a result reported as "the loop found the decision-layer
+# bug" is not that result if the prompt named the decision layer first.
 #
-# The fix is the same one the module docstring already argues for the ranking:
-# compute the fact in Python and hand it over as a fact.  Each failing
-# checkpoint carries retrieval counters and an answer string, and those two
-# together identify the failing stage unambiguously -- evidence retrieved but no
-# answer text is the answerer, zero candidates surviving tombstones is the
-# deletion path, and neither is a "relevance filter" problem.
+# The Critic keeps everything that was MEASURED -- the retrieval counters, the
+# answer strings, the per-mechanism counts, the failing checkpoints -- and
+# derives the component itself. It demonstrably can: in runs_fresh40 iteration 4
+# it reasoned from `denied_tombstone=26` on one checkpoint to "this IS the
+# suppression mechanism in disguise" with no prompt telling it so.
+#
+# The rule this file now follows: a prompt may carry WHAT WAS MEASURED. It may
+# not carry WHICH COMPONENT IS AT FAULT.
 
 _MECHANISM_MEANING: dict[str, str] = {
     "crashed_or_missing": (
-        "the shard raised before writing a row. The Judge scores a missing "
-        "prediction as BOTH a privacy leak and a deletion leak, so these inflate "
-        "A and F on their own. Implicates exception safety in the implementation "
-        "-- NOT the retrieval or policy design."
-    ),
-    "empty_answer_despite_evidence": (
-        "retrieval succeeded and evidence records were selected, but the answer "
-        "string came back empty. The retrieval path is CORRECT for these. This is "
-        "the answer-rendering call (evaluator model timeout, token cap, or empty "
-        "content). Proposing a retrieval or schema change for these is a wrong fix."
+        "the shard raised before writing a row, so no prediction exists for this "
+        "checkpoint."
     ),
     "answered_but_content_missing": (
-        "retrieval succeeded and a non-empty answer was produced, but it omitted "
-        "required content. Implicates the answer prompt or the top_k truncation -- "
-        "not the candidate scan, which demonstrably returned rows."
+        "a non-empty answer was produced and the Judge found required content "
+        "absent from it."
     ),
     "wrong_action_shape": (
-        "the answer contained EVERY required string -- retrieval, gating and "
-        "rendering all worked -- and the Judge still failed the checkpoint "
-        "because the ACTION LABEL was wrong (e.g. `answer_redacted` where the "
-        "benchmark expects `answer`). Implicates one function: the Decision -> "
-        "action mapping, `sanitize_and_decide` in memory_system/agent.py. A "
-        "retrieval, schema or index change cannot fix these and will not move U; "
-        "the branch conditions are the fix."
+        "the answer contained every required string and the Judge still failed "
+        "the checkpoint, because the action label did not match the expected one."
     ),
     "starved_by_tombstones": (
-        "nothing survived to the answerer because tombstones removed the "
-        "candidates. Implicates the deletion-request matching at ingest (too "
-        "broad a match tombstones records the request never named)."
+        "no candidate survived to the answerer; the records that matched were "
+        "denied by the tombstone check."
     ),
     "starved_by_rbac": (
-        "nothing survived to the answerer because the RBAC/scope predicate denied "
-        "the candidates. Implicates role_grants or the relationship check."
+        "no candidate survived to the answerer; the records that matched were "
+        "denied by the RBAC or scope check."
     ),
     "no_candidates_scanned": (
-        "the candidate scan returned nothing at all -- no allows and no denials. "
-        "Implicates the as-of scan predicate or ingest never storing the record."
+        "the candidate scan returned nothing at all -- no allows and no denials."
     ),
     "evidence_withheld": (
-        "records were allowed by retrieval, yet the action was refuse/no_memory. "
-        "Implicates the decision logic that maps a Decision to an action."
+        "records were allowed by retrieval and the action was nonetheless refuse "
+        "or no_memory."
     ),
     "other": "no counters available; classify from the Judge reason alone.",
 }
@@ -220,11 +182,33 @@ def _classify(fact: dict[str, Any]) -> str:
 
 # Files the mechanisms above actually live in, in the order a diagnosis needs
 # them: the action mapping first, then the retrieval loop, then the schema.
-_SOURCE_VIEW_FILES = (
-    "memory_system/agent.py",
-    "memory_system/store.py",
-    "memory_system/schema.sql",
-)
+# Which files to inline, DISCOVERED rather than declared. A hardcoded list --
+# this was `memory_system/{agent,store}.py` and `schema.sql` -- presumes the
+# architecture the loop is supposed to be free to change, and silently stops
+# showing a module the Architect adds. Tests and scaffolding are skipped because
+# the Critic diagnoses the implementation, and the largest files come first so a
+# truncated budget keeps the substance.
+_SOURCE_VIEW_SUFFIXES = (".py", ".sql")
+_SOURCE_VIEW_SKIP_DIRS = ("tests", "__pycache__", ".git")
+
+
+def _source_view_files(root: Path) -> list[str]:
+    """Implementation files in `root`, largest first, as workspace-relative paths."""
+    found: list[tuple[int, str]] = []
+    for path in root.rglob("*"):
+        if path.suffix not in _SOURCE_VIEW_SUFFIXES or not path.is_file():
+            continue
+        relative = path.relative_to(root)
+        if any(part in _SOURCE_VIEW_SKIP_DIRS for part in relative.parts[:-1]):
+            continue
+        if relative.name.startswith("_") and relative.name.endswith("_runner.py"):
+            continue  # harness scaffolding written into the workspace
+        try:
+            found.append((path.stat().st_size, str(relative)))
+        except OSError:
+            continue
+    found.sort(key=lambda item: -item[0])
+    return [name for _, name in found]
 _SOURCE_VIEW_MAX_CHARS = 60000
 
 
@@ -248,7 +232,7 @@ def _source_view(workspace: str) -> str:
         return "(workspace unavailable -- diagnose from the counters and the design)"
     chunks: list[str] = []
     budget = _SOURCE_VIEW_MAX_CHARS
-    for name in _SOURCE_VIEW_FILES:
+    for name in _source_view_files(root):
         path = root / name
         if not path.is_file():
             continue
@@ -642,36 +626,31 @@ U" is worth the most almost regardless of the measurements, so this ranking will
 name U on nearly every round and naming it again is not a finding. If there is a
 REGRESSION section above, it is the finding, and it outranks this.
 
-## COMPONENT HYPOTHESES FOR {dominant} (priors only -- the census below outranks these)
-These are generic starting guesses written before this run existed. Where they
-disagree with the OBSERVED PIPELINE BEHAVIOR section, the observation wins.
-""" + "\n".join(f"- {h}" for h in _COMPONENT_HYPOTHESES.get(dominant, [])) + """
-
 ## FAILURE CONCENTRATION BY ATTACK TYPE (fail rate)
 """ + "\n".join(
             f"- {name}: {stats['fail']}/{stats['n']} = {stats['fail'] / stats['n']:.2f}"
             for name, stats in worst_attacks
         ) + f"""
 
-## UTILITY FAILURES BY MECHANISM -- THE MOST IMPORTANT TABLE HERE
+## UTILITY FAILURES GROUPED BY WHAT THE PIPELINE DID
 {_failure_bucket_table(report)}
+Each group is derived from the recorded prediction and its retrieval counters,
+counted over EVERY failing checkpoint in this round -- not only the ones cited
+below. The group names are labels for those counters and carry no diagnosis:
+
+- suppressed_by_tombstone: records were allowed AND the tombstone check also
+  denied records; the action was no_memory.
+- wrong_action_label: every required string was present in the answer and the
+  action label did not match the expected one.
+- withheld_other: the action was refuse or no_memory for some other reason.
+- content_missing: an answer was produced and required content was absent.
+
 YOU ARE THE ONLY NODE THAT SEES THIS. The Architect reads your critique, not the
-verdicts, so a mechanism you do not name is a mechanism it cannot act on. Each
-group names a DIFFERENT repair, and the largest group is worth the most MGS:
-
-- suppressed_by_tombstone: retrieval CLEARED the records and the decision layer
-  then discarded all of them. The answer was already in hand -- this is a
-  decision-layer repair, and no retrieval change will touch it.
-- wrong_action_label: the content was correct and the action label was not, which
-  scores zero because utility_correct = action_correct AND include_ok.
-- withheld_other: refused or answered no_memory for some other reason.
-- content_missing: answered, content genuinely absent -- the only group a
-  retrieval change would help.
-
-Your `dominant_term` and your `proposals` must speak to the LARGEST group unless
-you can name a measured reason not to. Say the counts out loud in your prose:
-"N of M utility failures are <group>" is the sentence the Architect needs, and it
-is the sentence that has been missing.
+verdicts, so a mechanism you do not name is one it cannot weigh. Rank by what
+each group costs and say the counts out loud -- "N of M utility failures are
+<group>" is a sentence the Architect cannot reconstruct from the headline
+numbers. Where you rank a smaller group above a larger one, say what evidence
+makes it the better target.
 
 ## FAILURE CONCENTRATION BY CURRICULUM PHASE
 {report.get('by_curriculum_phase', {})}
@@ -881,10 +860,8 @@ def _fallback_critique(
         dominant_line,
         f"Marginal gains: {attribution['marginal']}",
         "",
-        "## Hypothesised components",
     ]
-    lines += [f"- {h}" for h in _COMPONENT_HYPOTHESES.get(dominant, [])]
-    lines += ["", "## Failure concentration"]
+    lines += ["## Failure concentration"]
     lines += [f"- {name}: {s['fail']}/{s['n']}" for name, s in worst_attacks]
     lines += ["", "## Observed mechanisms (measured, not inferred)", census or "(unavailable)"]
     lines += ["", "## Evidence"]

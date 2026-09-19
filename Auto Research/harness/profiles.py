@@ -309,7 +309,7 @@ CRITIC_PROFILE = DSHProfile(
         "capped by the harness is a valid and useful critique.\n\n"
         "Do not write vague advice such as 'improve the prompt' or 'add more "
         "checks'. Every finding names the component it concerns and the measured "
-        "result that implicates it."
+        "result it rests on."
     ),
 )
 

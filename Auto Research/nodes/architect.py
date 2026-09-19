@@ -210,8 +210,8 @@ _CLASSIFICATION_GUIDANCE: dict[str, str] = {
   the work order did not tell it concretely enough what to change.
 - Rewrite the WORK ORDER, not the design. Every step must name a file, a
   function, and what that function does differently afterwards. A step like
-  "implement retrieve()" against code that already has one is not actionable and
-  is what produces an episode of reading.
+  "implement <function>" against code that already has one is not actionable
+  and is what produces an episode of reading.
 - Cut the number of steps. An episode that lands three concrete edits is worth
   more than one that reads the whole workspace deciding where to start.
 - Say under `dev_failure_mitigations` which steps you made concrete.
@@ -796,8 +796,8 @@ be recovered, restated, or confirmed to have existed.
 The backing store is SQL only -- SQLite, one database file per run. Do NOT
 propose a vector database, a graph database or a document store as the primary
 store. You MAY change the schema: new/renamed/dropped columns, composite and
-partial indexes, denormalization, generated columns, and changes to the
-tombstone representation. Emit every schema change as an explicit ALTER TABLE /
+partial indexes, denormalization, generated columns, and changes to how
+deletion is represented. Emit every schema change as an explicit ALTER TABLE /
 CREATE INDEX statement with a one-line rationale naming the query path it
 serves.
 
@@ -831,8 +831,8 @@ Produce the design document and the Developer's work order.
 THE WORK ORDER IS A DELTA AGAINST THE IMPLEMENTATION ABOVE, NOT A REBUILD OF IT.
 The Developer inherits that exact workspace, already compiling and already
 passing its tests, and its episode is REJECTED if it finishes without changing a
-source file -- so a step like "implement `retrieve()`" against code that already
-has one buys nothing and costs the iteration. Every step must name a change:
+source file -- so a step that restates a function the code already has buys
+nothing and costs the iteration. Every step must name a change:
 what file, what function, and what it does differently afterwards. If a
 mechanism is already present and correct, do not restate it as work; spend the
 iteration on the term the measurements above say is losing.

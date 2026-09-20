@@ -267,8 +267,17 @@ CRITIC_PROFILE = DSHProfile(
     base_url=config.OPENROUTER_BASE_URL,
     api_key_env=config.OPENROUTER_API_KEY_ENV,
     route="openrouter",
-    # Same reasoning as the Architect: one document, so no todo bookkeeping.
-    capabilities=frozenset({"fs_read"}),
+    # NO CAPABILITIES AT ALL, so the persona's "YOU HAVE NO TOOLS" is true on
+    # BOTH transports rather than only on http.
+    #
+    # `fs_read` mounted a real read tool on dsh while the http path advertises
+    # none, so the same prompt was accurate or a lie depending on a transport
+    # setting -- and the version that granted the tool is the one that produced
+    # runs_5iter, where every critique came back as tool-call markup and no
+    # critique at all. The source the Critic needs is inlined by `_source_view`,
+    # which is the same construction the Architect already uses and makes the
+    # instruction true either way.
+    capabilities=frozenset(),
     max_turns=12,
     temperature=0.3,
     max_tokens=config.CRITIC_MAX_TOKENS,

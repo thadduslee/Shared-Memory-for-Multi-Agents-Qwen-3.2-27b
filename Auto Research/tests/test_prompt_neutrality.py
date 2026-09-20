@@ -102,3 +102,34 @@ def test_the_measured_material_is_still_there() -> None:
         assert observation in labels, f"the mechanism labels no longer describe {observation}"
     assert "crashed_or_missing" in critic._MECHANISM_MEANING
     assert not hasattr(critic, "_COMPONENT_HYPOTHESES")
+
+
+# ======================================================================
+# evidence attribution
+# ======================================================================
+
+
+def test_every_memory_line_names_a_speaker() -> None:
+    """An unattributed memory is a refusal waiting to happen.
+
+    GateMem's query prompt asks the answerer to decide authorization under the
+    GLOBAL ACCESS POLICY. Shown memories attributed to "unknown" it cannot
+    establish who said what or whether the requester owns them, and refuses --
+    which is what that policy says to do when authorization cannot be
+    established. Our shard emits {record_id, role, text}, with no
+    `principal_id`, so the fallback chain has to reach `role` or every line
+    renders as unknown. runs_v2_20iter answered 18% of checkpoints that way,
+    against 35-39% for every baseline on the same answerer and prompt.
+    """
+    from prompts_gatemem import format_memory_block
+
+    shard_shape = [{"record_id": "ep:t1", "role": "clinician", "text": "body one"}]
+    assert "speaker=clinician" in format_memory_block(shard_shape)
+    assert "unknown" not in format_memory_block(shard_shape)
+
+    # A principal id is more specific than a role and still wins.
+    richer = [{"principal_id": "clinician_dr_shah", "role": "clinician", "text": "b"}]
+    assert "speaker=clinician_dr_shah" in format_memory_block(richer)
+
+    # Nothing to attribute is still labelled rather than left blank.
+    assert "speaker=unknown" in format_memory_block([{"text": "b"}])

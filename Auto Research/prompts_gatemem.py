@@ -135,7 +135,29 @@ def format_memory_block(evidence: list[dict[str, Any]] | None) -> str:
         return "(none)"
     lines: list[str] = []
     for index, item in enumerate(evidence, 1):
-        speaker = str(item.get("principal_id") or item.get("speaker") or "unknown")
+        # `role` IS IN THE FALLBACK CHAIN, and leaving it out was a real loss.
+        #
+        # GateMem's own agents put `principal_id` on every retrieved record, so
+        # base.py needs only those two keys. Our evaluation shard emits
+        # {record_id, role, text} -- no principal_id, no speaker -- so every
+        # line rendered as "speaker=unknown". The answerer is asked to decide
+        # authorization under the GLOBAL ACCESS POLICY; shown eight unattributed
+        # memories it cannot establish who said what or whether the requester
+        # owns them, and refuses, which is what that policy tells it to do when
+        # authorization cannot be established.
+        #
+        # Measured on runs_v2_20iter iter_16: of 25 sampled checkpoints where
+        # the system had CLEARED records and the answerer still withheld, 14 had
+        # every required fact present in the evidence. The system answered 18%
+        # of checkpoints against 35-39% for every baseline -- on the same
+        # answerer, the same model and the same prompt.
+        speaker = str(
+            item.get("principal_id")
+            or item.get("speaker")
+            or item.get("author_id")
+            or item.get("role")
+            or "unknown"
+        )
         text = str(item.get("text") or "").strip().replace("\n", " ")
         lines.append(f"Memory {index} (speaker={speaker}): {text}")
     return "\n".join(lines)

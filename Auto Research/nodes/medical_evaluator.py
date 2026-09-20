@@ -350,9 +350,28 @@ def _evidence(result):
     """
     supplied = result.get("evidence")
     if isinstance(supplied, list):
-        rows = [{"record_id": str(item.get("record_id") or ""),
-                 "text": str(item.get("text") or "")}
-                for item in supplied if isinstance(item, dict)]
+        # THE SPEAKER TRAVELS WITH THE BODY. Stripping to {record_id, text}
+        # dropped the attribution, and GateMem's query_prompt.txt renders each
+        # record as "Memory N (speaker=...)" -- so every line arrived as
+        # `speaker=unknown`. That prompt asks the answerer to decide
+        # authorization under the GLOBAL ACCESS POLICY, whose decision priority
+        # turns on who owns the information; unable to establish that, it
+        # refuses, which is what the policy prescribes. runs_v2_20iter answered
+        # 18% of checkpoints against 35-39% for every baseline on the same
+        # answerer and prompt.
+        #
+        # Whichever of these the memory system emits is carried; none is
+        # required, and nothing here widens what the policy allowed.
+        rows = []
+        for item in supplied:
+            if not isinstance(item, dict):
+                continue
+            row = {"record_id": str(item.get("record_id") or ""),
+                   "text": str(item.get("text") or "")}
+            for key in ("principal_id", "speaker", "author_id", "role"):
+                if item.get(key):
+                    row[key] = str(item[key])
+            rows.append(row)
         if any(row["text"] for row in rows):
             return rows
     # `evidence` is not part of the three-method agent interface the Developer

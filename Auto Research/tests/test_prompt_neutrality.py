@@ -133,3 +133,32 @@ def test_every_memory_line_names_a_speaker() -> None:
 
     # Nothing to attribute is still labelled rather than left blank.
     assert "speaker=unknown" in format_memory_block([{"text": "b"}])
+
+
+def test_attribution_survives_the_shard_boundary() -> None:
+    """The end-to-end path, not the renderer alone.
+
+    `format_memory_block` reaching `role` is worth nothing if the evaluation
+    shard has already dropped it. `_evidence` used to rebuild each record as
+    {record_id, text}, so the fallback chain fired on a key that no longer
+    existed and every line still rendered as `speaker=unknown`. The first fix
+    was verified by calling the agent directly and handing its evidence to the
+    renderer -- which bypasses exactly the function that was losing it.
+    """
+    import re
+
+    from nodes.medical_evaluator import _EVAL_RUNNER
+    from prompts_gatemem import format_memory_block
+
+    namespace: dict = {}
+    source = re.search(r"def _evidence\(result\):.*?(?=\ndef main\()", _EVAL_RUNNER, re.S)
+    assert source, "_evidence is no longer in the runner source"
+    exec(source.group(0), namespace)  # noqa: S102 -- the runner IS a source string
+
+    rows = namespace["_evidence"]({
+        "action": "answer",
+        "evidence": [{"record_id": "ep:t1", "role": "clinician", "text": "a body"}],
+        "used_record_ids": ["ep:t1"],
+    })
+    assert rows[0].get("role") == "clinician", "the shard dropped the speaker again"
+    assert "speaker=clinician" in format_memory_block(rows)

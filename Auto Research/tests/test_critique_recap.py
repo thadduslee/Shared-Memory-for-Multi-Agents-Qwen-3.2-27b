@@ -38,13 +38,16 @@ import config
 import nodes._transport as transport
 from harness.dsh_client import DSHResult
 from nodes._recap import (
-    append_to_notebook,
+    append_history,
     approx_tokens,
+    cap_notes,
     cap_tokens,
     dev_failure_summary,
     fallback_critique_summary,
-    load_notebook,
+    load_notes,
+    notes_from_notebook,
     render_notebook_prompt,
+    write_notebook,
 )
 from nodes.architect import _recap_additions, architect_node
 from nodes.critic import critic_node
@@ -115,28 +118,28 @@ def _digest_state(**overrides):
     return state
 
 
-def test_the_model_summary_is_what_lands_in_the_digest() -> None:
+def test_the_digest_row_is_derived_and_not_taken_from_the_model() -> None:
+    """The digest is the record the run is AUDITED against.
+
+    The Architect's own account of the round goes into the notebook it curates.
+    This row is computed from the measured attribution instead, so a model that
+    writes itself a flattering notebook is not also writing the history
+    `check_learning.py` judges it by.
+    """
     (entry,) = _recap_additions(
-        _digest_state(), {"previous_critique_summary": "Blamed top_k truncation."},
+        _digest_state(), {"notebook_notes": ["whatever the model chose to keep"]},
         iteration=4, critique="the full critique",
     )
-    assert entry == {"iteration": 3, "kind": "critique", "summary": "Blamed top_k truncation."}
+    assert entry["iteration"] == 3
+    assert entry["kind"] == "critique"
+    assert "whatever the model chose" not in entry["summary"]
+    assert "U" in entry["summary"] and "store.retrieve" in entry["summary"]
 
 
-def test_a_model_summary_over_the_cap_is_cut_to_it() -> None:
-    (entry,) = _recap_additions(
-        _digest_state(), {"previous_critique_summary": "over budget. " * 200},
-        iteration=4, critique="the full critique",
-    )
-    assert approx_tokens(entry["summary"]) <= CAP
-
-
-def test_a_missing_summary_falls_back_to_the_measured_attribution() -> None:
-    """The attribution is computed in Python, so it survives an unreachable Critic."""
+def test_a_digest_row_is_still_bounded() -> None:
+    """Not prompt text any more, so the budget is generous -- but not absent."""
     (entry,) = _recap_additions(_digest_state(), {}, iteration=4, critique="the full critique")
-    assert "U" in entry["summary"]
-    assert "store.retrieve" in entry["summary"]
-    assert approx_tokens(entry["summary"]) <= CAP
+    assert approx_tokens(entry["summary"]) <= 400
 
 
 def test_an_iteration_already_in_the_digest_is_not_recapped_again() -> None:
@@ -149,8 +152,8 @@ def test_an_iteration_already_in_the_digest_is_not_recapped_again() -> None:
         critique_iteration=3,
         critique_digest=[{"iteration": 3, "kind": "critique", "summary": "already recorded"}],
     )
-    assert _recap_additions(state, {"previous_critique_summary": "again"},
-                            iteration=5, critique="the same stale critique") == []
+    assert _recap_additions(state, {}, iteration=5,
+                            critique="the same stale critique") == []
 
 
 def test_an_unbuildable_iteration_still_gets_a_row_of_its_own() -> None:
@@ -191,64 +194,109 @@ def test_rows_are_emitted_oldest_first() -> None:
 # ======================================================================
 
 
-DIGEST = [
-    {"iteration": 2, "kind": "critique", "summary": "Blamed the RBAC scope check."},
-    {"iteration": 1, "kind": "critique", "summary": "Blamed top_k truncation."},
-    {"iteration": 3, "kind": "dev_failure", "summary": "Could not build; tests_ok unmet."},
+NOTES = [
+    "top_k=16 truncated the candidate scan; raising it to 40 moved U +0.05.",
+    "Softening the tombstone gate raised U but cost A 0.09 -> 0.41; reverted.",
+    "The action label is scored, so a correct answer labelled answer_redacted still fails.",
 ]
 
 
-def test_the_notebook_lists_every_earlier_iteration_in_order(tmp_path: Path) -> None:
+def test_the_notebook_holds_the_notes_it_was_given(tmp_path: Path) -> None:
     path = tmp_path / "critique_summary.md"
-    append_to_notebook(path, DIGEST, CAP)
+    write_notebook(path, NOTES)
     written = path.read_text(encoding="utf-8")
     assert written.startswith("# CRITIQUE SUMMARY")
-    assert written.index("iteration 1") < written.index("iteration 2") < written.index("iteration 3")
-    assert "Blamed top_k truncation." in written
-    assert "build failure" in written, "an unbuilt iteration must be labelled as one"
+    for note in NOTES:
+        assert note in written
+    assert notes_from_notebook(written) == NOTES, "the file must round-trip"
 
 
-def test_the_notebook_is_appended_to_and_never_rewritten(tmp_path: Path) -> None:
-    """It is an audit trail of what each turn was actually shown, so a later
-    turn must not be able to correct or drop an earlier turn's row."""
+def test_the_notebook_is_replaced_so_a_stale_note_can_be_retired(tmp_path: Path) -> None:
+    """The whole point of curation: a finding later rounds disproved must be
+    removable, which an append-only log could never do."""
     path = tmp_path / "critique_summary.md"
-    append_to_notebook(path, [DIGEST[1]], CAP)
-    first = path.read_text(encoding="utf-8")
-    append_to_notebook(path, [DIGEST[0]], CAP)
-    second = path.read_text(encoding="utf-8")
+    write_notebook(path, NOTES)
+    write_notebook(path, [NOTES[2], "Raising top_k past 40 no longer helps; U is capped elsewhere."])
+    written = path.read_text(encoding="utf-8")
 
-    assert second.startswith(first), "an append must not disturb what is already there"
-    assert second.count("# CRITIQUE SUMMARY") == 1, "the header is written exactly once"
-    assert "Blamed top_k truncation." in second and "Blamed the RBAC scope check." in second
+    assert "top_k=16 truncated" not in written, "a retired note must actually go"
+    assert "no longer helps" in written
+    assert written.count("# CRITIQUE SUMMARY") == 1, "one header, not one per version"
 
 
-def test_nothing_to_append_leaves_no_notebook_at_all(tmp_path: Path) -> None:
-    """Iteration 1 has nothing before it; an empty file under a header would
-    read as 'this was checked and there was nothing'."""
+def test_an_empty_note_list_cannot_erase_the_notebook(tmp_path: Path) -> None:
+    """Under rewrite-in-place the run's memory is one bad reply away from gone:
+    a timeout, a missing json block, a forgotten key."""
     path = tmp_path / "critique_summary.md"
-    assert append_to_notebook(path, [], CAP) == ""
+    write_notebook(path, NOTES)
+    before = path.read_text(encoding="utf-8")
+
+    assert write_notebook(path, []) == ""
+    assert path.read_text(encoding="utf-8") == before, "the previous notes must survive"
+
+
+def test_nothing_to_write_leaves_no_notebook_at_all(tmp_path: Path) -> None:
+    """An empty file under a heading reads as 'this was checked and there was
+    nothing', which is a different and stronger claim than silence."""
+    path = tmp_path / "critique_summary.md"
+    assert write_notebook(path, []) == ""
     assert not path.exists()
 
 
-def test_a_missing_notebook_is_rebuilt_from_the_digest_in_state(tmp_path: Path) -> None:
+def test_notes_are_dropped_whole_never_cut_in_half(tmp_path: Path) -> None:
+    """The old scheme truncated every entry at 100 estimated tokens and cut 63%
+    of them mid-sentence -- systematically losing the trailing clause, which is
+    where a summary says what was DECIDED."""
+    long_note = " ".join(f"word{i}" for i in range(200))
+    capped = cap_notes([NOTES[0], long_note, NOTES[1]], max_notes=2, max_words=15)
+
+    assert len(capped) == 2, "the note count is a hard stop"
+    assert capped[0] == NOTES[0], "a note inside the budget is untouched"
+    assert capped[1].endswith("..."), "an over-long note is marked, not silently cut"
+    assert len(capped[1].split()) <= 16
+
+
+def test_a_missing_notebook_falls_back_to_the_notes_in_state(tmp_path: Path) -> None:
     """A resumed run, or a repointed RUNS_DIR, must not cost the whole history."""
     path = tmp_path / "gone.md"
-    rebuilt = load_notebook(path, DIGEST, CAP)
-    assert "Blamed top_k truncation." in rebuilt
-    assert rebuilt.index("iteration 1") < rebuilt.index("iteration 3")
+    assert load_notes(path, NOTES) == NOTES
 
-    append_to_notebook(path, [DIGEST[1]], CAP)
-    assert load_notebook(path, DIGEST, CAP) == path.read_text(encoding="utf-8"), (
-        "the file on disk wins over the digest whenever it exists"
+    write_notebook(path, [NOTES[2]])
+    assert load_notes(path, NOTES) == [NOTES[2]], (
+        "the file on disk wins over state whenever it exists"
     )
 
 
-def test_the_prompt_section_is_omitted_entirely_when_there_is_no_history() -> None:
-    """An empty section under a heading reads as 'checked, nothing found'."""
-    assert render_notebook_prompt("") == ""
-    assert render_notebook_prompt("   \n ") == ""
-    assert "iteration 1" in render_notebook_prompt(load_notebook(Path("/nonexistent"), DIGEST, CAP))
+def test_every_version_is_kept_in_the_history_log(tmp_path: Path) -> None:
+    """Rewriting loses the audit trail the append-only file had for free. The
+    log is what still tells a curation from a loss."""
+    path = tmp_path / "notebook_history.md"
+    append_history(path, 4, NOTES[:2])
+    append_history(path, 5, [NOTES[2]])
+    written = path.read_text(encoding="utf-8")
 
+    assert written.count("# NOTEBOOK HISTORY") == 1
+    assert "after iteration 4" in written and "after iteration 5" in written
+    assert "top_k=16 truncated" in written, "a note dropped from the notebook stays here"
+
+
+def test_the_prompt_asks_for_the_whole_list_and_states_both_budgets() -> None:
+    block = render_notebook_prompt(NOTES, max_notes=40, max_words=45)
+    assert "notebook_notes" in block
+    assert "FULL list" in block
+    assert "40 notes" in block and "45 words" in block, (
+        "budgets must be stated in units a model can count, not BPE tokens"
+    )
+    for note in NOTES:
+        assert note in block, "the model must see what it is revising"
+
+
+def test_the_first_iteration_is_told_the_notebook_is_empty() -> None:
+    """Not omitted: a model given no notebook section invents no notes, but a
+    model told the notebook is empty knows it is the one starting it."""
+    block = render_notebook_prompt([], max_notes=40, max_words=45)
+    assert "Empty" in block
+    assert "notebook_notes" in block
 
 def test_the_deterministic_summaries_carry_the_numbers_that_matter() -> None:
     summary = fallback_critique_summary(
@@ -285,9 +333,12 @@ def offline(monkeypatch, tmp_path):
     websearch.reset_search_client()
 
 
-async def test_the_architect_is_asked_for_the_summary_only_when_there_is_one(
+async def test_the_architect_is_asked_to_curate_the_notebook_every_iteration(
     monkeypatch, tmp_path: Path
 ) -> None:
+    """Asked on iteration 1 too, unlike the old per-critique summary: the first
+    round still learns what the baseline measured, and an empty reply cannot
+    erase a file that does not exist yet."""
     seen: list[str] = []
 
     async def scripted(profile, task, workdir, timeout_s=None, **kwargs):
@@ -297,25 +348,20 @@ async def test_the_architect_is_asked_for_the_summary_only_when_there_is_one(
     monkeypatch.setattr(transport, "agent_call", scripted)
 
     await architect_node({"iteration_count": 0, "memory_codebase": str(tmp_path / "ws")})
-    assert "`previous_critique_summary`" not in seen[0], "nothing to summarise on iteration 1"
-
-    await architect_node({
-        "iteration_count": 1, "memory_codebase": str(tmp_path / "ws"),
-        "critique": "the previous critique", "critique_iteration": 1,
-        "proposed_design": "the previous design",
-    })
-    assert "`previous_critique_summary`" in seen[1]
+    assert "`notebook_notes`" in seen[0]
+    assert "Empty" in seen[0], "the first iteration is told it is starting the notebook"
 
 
-async def test_the_architect_appends_to_the_notebook_and_leaves_design_md_alone(
+async def test_the_architect_rewrites_the_notebook_and_leaves_design_md_alone(
     monkeypatch, tmp_path: Path
 ) -> None:
-    """The summary is the notebook's, not the design document's. `design.md` is
-    the model's reply verbatim; `design.json` records what was appended."""
+    """The notes are the notebook's, not the design document's. `design.md` is
+    the model's reply verbatim."""
     async def scripted(profile, task, workdir, timeout_s=None, **kwargs):
         return _reply({
             "schema_ddl": "CREATE TABLE t (x);", "work_order": ["do a thing"],
-            "previous_critique_summary": "Blamed the tombstone gate ordering.",
+            "notebook_notes": ["The deletion gate discards allowed records.",
+                               "Raising the scan cap moved U +0.05."],
         })
 
     monkeypatch.setattr(transport, "agent_call", scripted)
@@ -326,60 +372,74 @@ async def test_the_architect_appends_to_the_notebook_and_leaves_design_md_alone(
         "proposed_design": "the previous design",
     })
 
-    notebook = (config.RUNS_DIR / "critique_summary.md").read_text(encoding="utf-8")
-    assert "**iteration 1** (critique): Blamed the tombstone gate ordering." in notebook
+    notebook = config.critique_summary_path().read_text(encoding="utf-8")
+    assert "The deletion gate discards allowed records." in notebook
+    assert "Raising the scan cap moved U +0.05." in notebook
+    assert result["notebook_notes"] == [
+        "The deletion gate discards allowed records.",
+        "Raising the scan cap moved U +0.05.",
+    ], "the curated list is published to state as the disk-loss fallback"
+
+    history = (config.RUNS_DIR / "notebook_history.md").read_text(encoding="utf-8")
+    assert "after iteration 2" in history
 
     design_md = (config.RUNS_DIR / "iter_2" / "design.md").read_text(encoding="utf-8")
-    assert "CHANGES IN THIS ITERATION" not in design_md
     assert design_md == result["proposed_design"], "design.md is the reply, unadorned"
 
-    written = json.loads((config.RUNS_DIR / "iter_2" / "design.json").read_text(encoding="utf-8"))
-    assert "change_summary" not in written, "the Architect no longer diffs its own designs"
-    assert written["critique_recap_added"] == [
-        {"iteration": 1, "kind": "critique", "summary": "Blamed the tombstone gate ordering."}
-    ]
-    assert result["critique_digest"] == written["critique_recap_added"]
+
+async def test_a_reply_with_no_notes_leaves_the_notebook_standing(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Under rewrite-in-place one bad reply could otherwise erase the run's
+    memory, so the failure mode must be losing a lesson, not losing the file."""
+    async def scripted(profile, task, workdir, timeout_s=None, **kwargs):
+        return _reply({"schema_ddl": "CREATE TABLE t (x);", "work_order": ["do a thing"]})
+
+    monkeypatch.setattr(transport, "agent_call", scripted)
+    write_notebook(config.critique_summary_path(), ["An earlier lesson worth keeping."])
+
+    await architect_node({
+        "iteration_count": 1, "memory_codebase": str(tmp_path / "ws"),
+        "critique": "the previous critique", "critique_iteration": 1,
+    })
+
+    notebook = config.critique_summary_path().read_text(encoding="utf-8")
+    assert "An earlier lesson worth keeping." in notebook
 
 
 async def test_the_notebook_the_architect_reads_predates_the_critique_it_answers(
     monkeypatch, tmp_path: Path
 ) -> None:
     """THE ORDER IS THE POINT. Iteration i's critique is in the prompt in full;
-    the notebook in the same prompt must still be iterations 1..i-1, or the same
-    critique arrives twice with nothing saying which one the design answers."""
+    the notebook in the same prompt must still be what stood BEFORE it, or the
+    same round arrives twice with nothing saying which one the design answers."""
     seen: list[str] = []
 
     async def scripted(profile, task, workdir, timeout_s=None, **kwargs):
         seen.append(task or "")
         return _reply({
             "schema_ddl": "CREATE TABLE t (x);", "work_order": ["do a thing"],
-            "previous_critique_summary": "Iteration 2 blamed the tombstone gate.",
+            "notebook_notes": ["Iteration 1 blamed the scan cap.",
+                               "Iteration 2 blamed the deletion gate."],
         })
 
     monkeypatch.setattr(transport, "agent_call", scripted)
+    write_notebook(config.critique_summary_path(), ["Iteration 1 blamed the scan cap."])
 
-    append_to_notebook(
-        config.critique_summary_path(),
-        [{"iteration": 1, "kind": "critique", "summary": "Iteration 1 blamed top_k."}],
-        CAP,
-    )
     await architect_node({
         "iteration_count": 2, "memory_codebase": str(tmp_path / "ws"),
         "critique": "iteration 2's critique, in full", "critique_iteration": 2,
-        "critique_digest": [{"iteration": 1, "kind": "critique",
-                             "summary": "Iteration 1 blamed top_k."}],
         "proposed_design": "the previous design",
     })
 
-    assert "Iteration 1 blamed top_k." in seen[0], "the notebook is read into the prompt"
+    assert "Iteration 1 blamed the scan cap." in seen[0], "the notebook is read into the prompt"
     assert "iteration 2's critique, in full" in seen[0]
-    assert "Iteration 2 blamed the tombstone gate." not in seen[0], (
-        "the notebook must not yet contain a summary of the critique being answered"
+    assert "Iteration 2 blamed the deletion gate." not in seen[0], (
+        "the notebook must not yet contain this round's own lesson"
     )
 
     notebook = config.critique_summary_path().read_text(encoding="utf-8")
-    assert "Iteration 1 blamed top_k." in notebook
-    assert "Iteration 2 blamed the tombstone gate." in notebook, "appended after the design"
+    assert "Iteration 2 blamed the deletion gate." in notebook, "written after the design"
 
 
 async def test_the_critic_writes_the_critique_and_nothing_else(
@@ -400,7 +460,9 @@ async def test_the_critic_writes_the_critique_and_nothing_else(
 
     state = _state(tmp_path)
     state["iteration_count"] = 4
-    state["critique_digest"] = DIGEST
+    state["critique_digest"] = [
+        {"iteration": 1, "kind": "critique", "summary": "Blamed the scan cap."},
+    ]
     result = await critic_node(state)
 
     assert result["critique_iteration"] == 4

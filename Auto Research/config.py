@@ -781,23 +781,24 @@ ARCHITECT_CODE_VIEW_MAX_CHARS: int = _env_int("ARCHITECT_CODE_VIEW_MAX_CHARS", 9
 ARCHITECT_DEV_FAILURE_MAX_CHARS: int = _env_int("ARCHITECT_DEV_FAILURE_MAX_CHARS", 12_000)
 
 
-# How much of ONE earlier iteration the Architect's notebook is allowed to carry.
+# The Architect's notebook, which it now CURATES rather than appends to.
 #
-# Every Architect turn summarises the critique it was handed and appends that
-# summary to `runs/critique_summary.md`, the notebook it keeps (see
-# nodes/_recap.py). The notebook is append-only, so an uncapped entry would grow
-# both the file and every subsequent Architect prompt without bound.
+# WHAT CHANGED AND WHY. The notebook used to take one summary per iteration,
+# each truncated to 100 estimated tokens, appended forever. Measured over a real
+# 19-entry run: 63% of entries were cut mid-sentence. Worse, they were cut in a
+# predictable place -- a summary runs diagnosis, then what was asked for, then
+# what was decided, so the clause that got dropped was systematically the
+# DECISION, which is the one thing the notebook exists to carry ("do not
+# re-propose a change an earlier iteration already made"). It also had no way to
+# retire a finding that later rounds disproved: an append-only log of stale
+# conclusions grows monotonically less true.
 #
-# THE CAP IS PER ENTRY, NOT PER FILE. One capped entry per iteration makes the
-# growth linear -- ~1k tokens across a full MAX_ITERATIONS=10 run, which is
-# nothing against ARCHITECT_CODE_VIEW_MAX_CHARS. Capping the notebook as a whole
-# would instead force every entry to shrink as the run went on, and the earliest
-# iterations -- whose lessons are the ones most likely to have been forgotten --
-# are exactly the ones that squeezing would erase first.
-#
-# Counted with the estimator in `nodes._recap.approx_tokens`, which takes no
-# tokenizer dependency and deliberately over-estimates.
-ARCHITECT_CRITIQUE_RECAP_MAX_TOKENS: int = _env_int("ARCHITECT_CRITIQUE_RECAP_MAX_TOKENS", 100)
+# So the Architect returns the whole list each turn and the file is replaced.
+# Both budgets are stated to the model as well as enforced, and both are
+# countable BY a model -- a note count and a word count, where "100 tokens" was
+# not something it could check itself.
+ARCHITECT_NOTEBOOK_MAX_NOTES: int = _env_int("ARCHITECT_NOTEBOOK_MAX_NOTES", 40)
+ARCHITECT_NOTEBOOK_MAX_WORDS: int = _env_int("ARCHITECT_NOTEBOOK_MAX_WORDS", 45)
 
 LOG_LEVEL: Final[str] = _env("LOG_LEVEL", "INFO")
 

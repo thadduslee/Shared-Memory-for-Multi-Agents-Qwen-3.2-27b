@@ -18,7 +18,7 @@ Test suite (`gatemem-auto` env, `pytest` from `Auto Research/`): **680 passed, 3
 | `e93edcf` Adopt GateMem's judge semantics behind `JUDGE_IMPL` | Adds `nodes/judge_gatemem.py`, a port of GateMem's scoring primitives. **Matcher:** literal, whitespace-normalised, word-boundary matching, and it also scans `answer_structured`. **Authority:** the LLM judge has the final say on utility and the regex pass is only auxiliary, which is how GateMem itself works. Before this, our regex result was binding, which froze `runs_real_100iter_v4` on answers that already contained every required fact in a different word order. The old behaviour is still available as `JUDGE_IMPL=legacy`. Also adds `rescore_run.py` to rescore a finished run offline. |
 | `6a8e770` Separate role from benchmark in the prompts; score on GateMem's own (point 4) | The Evaluator and Judge now render **GateMem's own prompt files** (`bench/prompts/query_prompt.txt`, `judge_prompt.txt`) through `prompts_gatemem.py`, reusing bench's helpers for the policy block and relationship facts. Our own answerer prompt told the model the evidence was pre-authorised, which inflated U. `BENCHMARK_PROMPTS=local` brings back the old prompt pair. The judge is now also given the checkpoint's visible half. |
 | `7fa7542` Allow a local Qwen judge on the openai route | `RouteConfig.is_vllm` is now a declared field instead of a check on the route name, and the openai route infers it from its base URL (`OPENAI_ROUTE_IS_VLLM` overrides). This way a judge on a local vLLM gets `enable_thinking: false`, like the one that scored the baselines. |
-| `054a486` Attribute the answerer's evidence; score the baselines on our judge | `format_memory_block` now falls back to `role`. Before, every memory line reached the answerer as `speaker=unknown`, so under GateMem's access policy it refused whenever it could not work out who had said what. Also adds `score_baseline.py`, which runs a stored baseline's predictions through **this project's** judge using the same functions as the live loop. That way our system and the baselines are graded by one instrument. The rescored result files are not included; the script regenerates them. |
+| `054a486` Attribute the answerer's evidence; score the baselines on our judge | `format_memory_block` now falls back to `role`. Before, every memory line reached the answerer as `speaker=unknown`, so under GateMem's access policy it refused whenever it could not work out who had said what. Also adds `score_baseline.py`, which runs a stored baseline's predictions through **this project's** judge using the same functions as the live loop. That way our system and the baselines are graded by one instrument. The rescored results are in `outputs_qwen38-27b_judge/` (see [Rescored baselines](#rescored-baselines)). |
 | `b4d04cb` Carry the speaker through the evaluation shard, not just the renderer | The previous fix did nothing in a live run, because the shard's `_evidence` rebuilt each record as `{record_id, text}`. It now carries `principal_id` / `speaker` / `author_id` / `role`, and a new test runs the shard's own `_evidence` source end to end. |
 | `3a6e036` Let the answerer think, as every baseline's did | Every baseline answered with Qwen3's template default, **thinking on**, while our evaluator forced it off. `vllm_chat_template_kwargs(model, role)` now leaves thinking on for the `evaluator` role (`EVALUATOR_THINKING`, default on); the judge stays non-thinking. On 27 office checkpoints: thinking off answered 3/27, thinking on answered 22/27. The same commit adds:<br>• `EVALUATOR_TIMEOUT_S` (900 s)<br>• `EVALUATOR_MAX_TOKENS` raised from 4096 to 16384 in `env_local_eval.sh`<br>• `score_baseline.py` naming the grader from evidence instead of from the directory name<br>• regenerated `.cordis` personas |
 
@@ -44,7 +44,22 @@ These commits were cherry-picked from `judge-gatemem-adopt`. Because the Sep 17�
 - **Critic routing.** The Critic stays on the OpenRouter route; per-node `CRITIC_*` routing is not included. As a result, `CRITIC_TRANSPORT=http` in `env_local_eval.sh` has no effect here, and the Critic follows `AGENT_TRANSPORT` instead. That is harmless, since it no longer has tools.
 - **`is_vllm`.** The route field was originally introduced by the local-agents commit. Only the field and the client check were brought into `7fa7542`. `env_local_judge.sh` was dropped because it depends on `env_local_agents.sh`.
 - **Comments** that referred to the probe gate or the starved-reply retry were trimmed, because neither exists on this branch.
-- **Rescored baseline results** (`outputs_qwen38-27b_judge/`) are left out; `score_baseline.py` regenerates them.
+
+## Rescored baselines
+
+`outputs_qwen38-27b_judge/` holds every stored baseline's predictions rescored by **this project's judge**: Qwen/Qwen3.8-27B with `JUDGE_IMPL=gatemem` and GateMem's `judge_prompt.txt`. Each `summary.json` names its grader, its prompt file and the predictions it came from.
+
+| Directories | What they are |
+|---|---|
+| `medical_qwen38_27b_*` (7) | Medical baselines with the Qwen3.8-27B answerer |
+| `medical_qwen32b_*__judge-gpt41` (7) | Medical baselines with the Qwen3-32B answerer. The suffix is the name of the **source** directory in `outputs/`; the scores here come from our judge, not gpt-4.1. |
+| `office_qwen38_27b_*` (7) | Office baselines with the Qwen3.8-27B answerer |
+| `smoke` | Smoke test of the rescoring path |
+| `scores_table.json`, `rescore.log` | Medical comparison table (our judge vs the published numbers) and the rescoring log |
+
+The outputs are not duplicated. In `outputs/`, each `medical_qwen38_27b_X` has byte-identical predictions to `medical_qwen38_27b_X__judge-gpt41` (the same run, scored by the regex matcher only in one and by gpt-4.1 in the other), so each of those pairs was rescored **once**. The `qwen32b` sets exist only under their `__judge-gpt41` names and are different predictions.
+
+On utility, our judge reproduces gpt-4.1 to a mean absolute difference of 0.0062 across the 15 medical systems. On privacy it is stricter for all 15 (mean +0.151), which is a difference in definition rather than noise. `scores_table.json` covers medical only; the office summaries are the per-directory `summary.json` files.
 
 ## Running
 

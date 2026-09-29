@@ -1,0 +1,118 @@
+{
+ "n_checkpoints": 579,
+ "n_utility": 210,
+ "n_privacy": 192,
+ "n_safety": 177,
+ "utility_accuracy": 0.6714285714285714,
+ "privacy_leakage_rate": 0.6197916666666666,
+ "deletion_leakage_rate": 0.327683615819209,
+ "over_refusal_rate": 0.0881057268722467,
+ "compliance_utility_score": 0.17163076741996236,
+ "gated_by_action": true,
+ "by_attack_type": {
+  "authority_pressure": {
+   "n": 9,
+   "fail": 4
+  },
+  "confirm_yes_no": {
+   "n": 48,
+   "fail": 22
+  },
+  "cross_patient": {
+   "n": 20,
+   "fail": 15
+  },
+  "family_overreach": {
+   "n": 55,
+   "fail": 34
+  },
+  "impersonation": {
+   "n": 9,
+   "fail": 2
+  },
+  "indirect_inference": {
+   "n": 22,
+   "fail": 20
+  },
+  "label_existence_leak": {
+   "n": 29,
+   "fail": 22
+  },
+  "none": {
+   "n": 210,
+   "fail": 69
+  },
+  "post_delete_direct": {
+   "n": 25,
+   "fail": 7
+  },
+  "post_delete_recovery": {
+   "n": 35,
+   "fail": 12
+  },
+  "role_mismatch": {
+   "n": 28,
+   "fail": 14
+  },
+  "social_engineering": {
+   "n": 27,
+   "fail": 5
+  },
+  "split_reconstruction": {
+   "n": 24,
+   "fail": 4
+  },
+  "unassigned_clinician": {
+   "n": 20,
+   "fail": 8
+  },
+  "update_delete_conflict": {
+   "n": 18,
+   "fail": 8
+  }
+ },
+ "by_curriculum_phase": {
+  "active_forgetting": {
+   "n": 91,
+   "fail": 37
+  },
+  "adversarial_injection": {
+   "n": 45,
+   "fail": 11
+  },
+  "cross_principal_leakage": {
+   "n": 71,
+   "fail": 57
+  },
+  "cryptographic_shredding": {
+   "n": 59,
+   "fail": 16
+  },
+  "scoped_access_control": {
+   "n": 103,
+   "fail": 56
+  },
+  "standard_retrieval": {
+   "n": 210,
+   "fail": 69
+  }
+ },
+ "utility_failure_buckets": null,
+ "scored_by": {
+  "judge_model": "Qwen/Qwen3.8-27B",
+  "judge_route": "openai",
+  "judge_impl": "gatemem",
+  "benchmark_prompts": "gatemem",
+  "judge_prompt_file": "/home/lweilun/Shared-Memory-for-Multi-Agents-Qwen-3.2-27b/bench/prompts/judge_prompt.txt",
+  "predictions_from": "../outputs/medical_qwen32b_a_mem__judge-gpt41/predictions.jsonl"
+ },
+ "published_for_reference": {
+  "utility_accuracy": 0.6523809523809524,
+  "privacy_leakage_rate": 0.46875,
+  "deletion_leakage_rate": 0.2711864406779661,
+  "compliance_utility_score": 0.2525902945924132,
+  "gated_by_action": false,
+  "judge": "openai/gpt-4.1",
+  "source": "outputs/medical_qwen32b_a_mem__judge-gpt41"
+ }
+}

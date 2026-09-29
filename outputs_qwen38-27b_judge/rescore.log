@@ -1,0 +1,65 @@
+judge:   Qwen/Qwen3.8-27B via openai
+prompts: BENCHMARK_PROMPTS=gatemem (gatemem = bench/prompts/judge_prompt.txt)
+scorer:  JUDGE_IMPL=gatemem, utility gated on the action label
+
+medical_qwen38_27b_a_mem
+  ours      U=0.6286 A=0.2656 F=0.0452 MGS=0.4407 OR=0.2775  (579 scored, 131s)
+  published U=0.3095 MGS=0.2508   (judge: gpt-4.1, gated_by_action=False)
+
+medical_qwen38_27b_long_context
+  ours      U=0.9190 A=0.1615 F=0.0056 MGS=0.7663 OR=0.0441  (579 scored, 126s)
+  published U=0.4381 MGS=0.3880   (judge: gpt-4.1, gated_by_action=False)
+
+medical_qwen38_27b_mem0
+  ours      U=0.4619 A=0.3281 F=0.0226 MGS=0.3033 OR=0.3172  (579 scored, 119s)
+  published U=0.1810 MGS=0.1365   (judge: gpt-4.1, gated_by_action=False)
+
+medical_qwen38_27b_rag_naive
+  ours      U=0.6571 A=0.2708 F=0.0395 MGS=0.4602 OR=0.2687  (579 scored, 118s)
+  published U=0.2952 MGS=0.2335   (judge: gpt-4.1, gated_by_action=False)
+
+medical_qwen38_27b_rag_policy
+  ours      U=0.3857 A=0.1562 F=0.0508 MGS=0.3089 OR=0.5330  (579 scored, 117s)
+  published U=0.1619 MGS=0.1336   (judge: gpt-4.1, gated_by_action=False)
+
+medical_qwen38_27b_remem_i
+  ours      U=0.5571 A=0.3125 F=0.0847 MGS=0.3506 OR=0.3260  (579 scored, 118s)
+  published U=0.2952 MGS=0.2337   (judge: gpt-4.1, gated_by_action=False)
+
+medical_qwen38_27b_remem_s
+  ours      U=0.5238 A=0.3750 F=0.0904 MGS=0.2978 OR=0.3744  (579 scored, 118s)
+  published U=0.2667 MGS=0.2059   (judge: gpt-4.1, gated_by_action=False)
+
+medical_qwen32b_a_mem__judge-gpt41
+  ours      U=0.6714 A=0.6198 F=0.3277 MGS=0.1716 OR=0.0881  (579 scored, 118s)
+  published U=0.6524 MGS=0.2526   (judge: gpt-4.1, gated_by_action=False)
+
+medical_qwen32b_long_context__judge-gpt41
+  ours      U=0.8667 A=0.2812 F=0.1412 MGS=0.5349 OR=0.0132  (579 scored, 139s)
+  published U=0.8714 MGS=0.5730   (judge: gpt-4.1, gated_by_action=False)
+
+medical_qwen32b_mem0__judge-gpt41
+  ours      U=0.5286 A=0.6094 F=0.3672 MGS=0.1306 OR=0.1366  (579 scored, 118s)
+  published U=0.5238 MGS=0.1991   (judge: gpt-4.1, gated_by_action=False)
+
+medical_qwen32b_rag_naive__judge-gpt41
+  ours      U=0.6714 A=0.6406 F=0.3107 MGS=0.1663 OR=0.0837  (579 scored, 119s)
+  published U=0.6714 MGS=0.2727   (judge: gpt-4.1, gated_by_action=False)
+
+medical_qwen32b_rag_policy__judge-gpt41
+  ours      U=0.3714 A=0.3021 F=0.1638 MGS=0.2168 OR=0.4405  (579 scored, 117s)
+  published U=0.3667 MGS=0.2659   (judge: gpt-4.1, gated_by_action=False)
+
+medical_qwen32b_remem_i__judge-gpt41
+  ours      U=0.5143 A=0.6510 F=0.3446 MGS=0.1176 OR=0.1938  (579 scored, 118s)
+  published U=0.5095 MGS=0.2062   (judge: gpt-4.1, gated_by_action=False)
+
+medical_qwen32b_remem_s__judge-gpt41
+  ours      U=0.4619 A=0.6198 F=0.2994 MGS=0.1230 OR=0.2291  (579 scored, 118s)
+  published U=0.4571 MGS=0.2161   (judge: gpt-4.1, gated_by_action=False)
+
+smoke
+  ours      U=0.3667 A=0.3229 F=0.1582 MGS=0.2090 OR=0.4405  (579 scored, 117s)
+  published U=0.3589 MGS=0.2207   (judge: gpt-4.1, gated_by_action=False)
+
+wrote ../outputs_qwen38-27b_judge/scores_table.json

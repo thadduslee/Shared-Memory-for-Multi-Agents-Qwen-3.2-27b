@@ -285,7 +285,7 @@ class AsyncLLMClient:
             # thinking model from reasoning past HTTP_TIMEOUT_S and returning an
             # empty answer. Only vLLM understands this key; OpenRouter and
             # OpenAI would reject it.
-            template_kwargs = config.vllm_chat_template_kwargs(model)
+            template_kwargs = config.vllm_chat_template_kwargs(model, role)
             if template_kwargs:
                 payload["chat_template_kwargs"] = template_kwargs
 

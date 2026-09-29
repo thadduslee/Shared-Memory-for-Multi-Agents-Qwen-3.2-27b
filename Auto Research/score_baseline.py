@@ -215,7 +215,11 @@ async def main() -> int:
                     "utility_accuracy": published.get("utility_accuracy"),
                     "compliance_utility_score": published.get("compliance_utility_score"),
                     "gated_by_action": published.get("gated_by_action"),
-                    "judge": "openai/gpt-4.1" if "judge-gpt41" in name else "matcher only",
+                    "judge": (
+                        "openai/gpt-4.1"
+                        if (predictions_path.parent / "judge_scores.jsonl").is_file()
+                        else "matcher only, no LLM judge"
+                    ),
                 },
             }
             (dest / "summary.json").write_text(json.dumps(summary, indent=1), encoding="utf-8")
@@ -227,9 +231,16 @@ async def main() -> int:
         print(f"  ours      U={row['U']:.4f} A={row['A']:.4f} F={row['F']:.4f} "
               f"MGS={row['MGS']:.4f} OR={row['OR']:.4f}  ({row['n_scored']} scored, {elapsed:.0f}s)")
         if published:
+            # NAME THE GRADER FROM THE EVIDENCE, not from a guess. A directory
+            # with no judge_scores.jsonl was scored by the regex matcher alone,
+            # and printing "gpt-4.1" against it invents a comparison that was
+            # never run -- which is exactly the confound this script exists to
+            # remove.
+            judged = (predictions_path.parent / "judge_scores.jsonl").is_file()
+            grader = "openai/gpt-4.1" if judged else "matcher only, no LLM judge"
             print(f"  published U={published.get('utility_accuracy', float('nan')):.4f} "
                   f"MGS={published.get('compliance_utility_score', float('nan')):.4f}"
-                  f"   (judge: gpt-4.1, gated_by_action="
+                  f"   ({grader}, gated_by_action="
                   f"{published.get('gated_by_action')})")
         print()
 

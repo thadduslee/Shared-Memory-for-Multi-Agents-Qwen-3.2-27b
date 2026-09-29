@@ -289,6 +289,25 @@ def openrouter_reasoning(model: str) -> dict[str, object] | None:
 # Prefix-gated exactly like the OpenRouter block above: a non-thinking model
 # served on the same vLLM route would reject the unknown template kwarg.
 VLLM_DISABLE_THINKING: Final[bool] = _env_bool("VLLM_DISABLE_THINKING", True)
+
+# THE ANSWERER REASONS, BECAUSE THE BASELINES' DID. Every baseline output in
+# outputs/ was produced by the bench's own client, which never sends
+# `enable_thinking`, against a vLLM whose Qwen3 template default is thinking
+# ON (medical 2026-08-26: ~280 hidden reasoning tokens per answer, unreported
+# by that vLLM; office 2026-09-21: ~880, reported). The disable above was added
+# for the timeouts and silently scored our memory against a different answerer
+# in both domains. Measured on the 27 office expected-answer checkpoints the
+# keyed2 champion hard-refused, same evidence: thinking off 3/27 answered,
+# thinking on 22/27, zero refusals. So the EVALUATOR role keeps the template
+# default; the judge stays non-thinking (it is our own, and scores the
+# baselines the same way). The timeout that motivated the disable is handled
+# where it belongs: EVALUATOR_TIMEOUT_S below.
+EVALUATOR_THINKING: Final[bool] = _env_bool("EVALUATOR_THINKING", True)
+#: Per-call read timeout for the answerer. The office baselines averaged ~19s
+#: per reasoning answer at low concurrency; sixteen in flight on one GPU is
+#: several times that, and HTTP_TIMEOUT_S (120s) was sized for a non-thinking
+#: reply.
+EVALUATOR_TIMEOUT_S: Final[float] = _env_float("EVALUATOR_TIMEOUT_S", 900.0)
 VLLM_THINKING_MODEL_PREFIXES: Final[tuple[str, ...]] = tuple(
     prefix.strip()
     for prefix in _env("VLLM_THINKING_MODEL_PREFIXES", "Qwen/,qwen/").split(",")
@@ -296,13 +315,17 @@ VLLM_THINKING_MODEL_PREFIXES: Final[tuple[str, ...]] = tuple(
 )
 
 
-def vllm_chat_template_kwargs(model: str) -> dict[str, object] | None:
-    """vLLM `chat_template_kwargs` for `model`, or None to leave it alone.
+def vllm_chat_template_kwargs(model: str, role: str | None = None) -> dict[str, object] | None:
+    """vLLM `chat_template_kwargs` for `model` in `role`, or None to leave it alone.
 
-    Setting VLLM_DISABLE_THINKING=0 restores the model's own default template,
-    which is the escape hatch if a future evaluator model needs to reason.
+    None means the model's own template default -- for Qwen3, thinking ON.
+    The evaluator gets that default (see EVALUATOR_THINKING); every other role
+    on a thinking model gets `enable_thinking: False`. VLLM_DISABLE_THINKING=0
+    turns the disable off for everyone.
     """
     if not VLLM_DISABLE_THINKING:
+        return None
+    if role == "evaluator" and EVALUATOR_THINKING:
         return None
     if not any(model.startswith(prefix) for prefix in VLLM_THINKING_MODEL_PREFIXES):
         return None

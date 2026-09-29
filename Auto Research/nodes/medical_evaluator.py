@@ -594,6 +594,7 @@ async def _call_answerer(
                 ) + [{"role": "user", "content": task}],
                 temperature=EVALUATOR_PROFILE.temperature,
                 max_tokens=EVALUATOR_PROFILE.max_tokens,
+                timeout_s=config.EVALUATOR_TIMEOUT_S,
                 role="evaluator",
             )
             text, usage, ok = result.text, result.usage, result.ok

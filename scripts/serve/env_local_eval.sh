@@ -39,13 +39,16 @@ export CRITIC_MAX_TOKENS="${CRITIC_MAX_TOKENS:-32768}"
 
 # ---- evaluator + judge: local vLLM, served as Qwen/Qwen3.8-27B ----
 # The "Qwen/" prefix is load-bearing: vllm_chat_template_kwargs only emits
-# {"enable_thinking": false} for a model matching VLLM_THINKING_MODEL_PREFIXES,
-# and a thinking evaluator reasons past its read timeout on every checkpoint.
+# {"enable_thinking": false} for a model matching VLLM_THINKING_MODEL_PREFIXES.
+# The judge gets that disable; the evaluator deliberately does not, because
+# every baseline's answerer reasoned (see config.EVALUATOR_THINKING).
 export VLLM_BASE_URL=http://localhost:8002/v1
 export VLLM_API_KEY="${LOCAL_API_KEY:-sk-local-dummy-key}"
 export EVALUATOR_MODEL=Qwen/Qwen3.8-27B
 export EVAL_TRANSPORT=http
-export EVALUATOR_MAX_TOKENS="${EVALUATOR_MAX_TOKENS:-4096}"
+# 16384: the answerer reasons now (EVALUATOR_THINKING); 4096 was measured as all
+# reasoning and no content on medical prompts.
+export EVALUATOR_MAX_TOKENS="${EVALUATOR_MAX_TOKENS:-16384}"
 
 export JUDGE_ROUTE=openai
 export OPENAI_BASE_URL=http://localhost:8002/v1
@@ -55,7 +58,7 @@ export JUDGE_TRANSPORT=http
 export JUDGE_MAX_TOKENS="${JUDGE_MAX_TOKENS:-2048}"
 export USE_LLM_JUDGE=true
 # The openai route infers is_vllm from its base URL; pinned so the judge gets
-# the same thinking-disable the evaluator does.
+# the thinking-disable.
 export OPENAI_ROUTE_IS_VLLM=true
 
 # One dedicated GPU, no rate limit: sized for the fan-out rather than for

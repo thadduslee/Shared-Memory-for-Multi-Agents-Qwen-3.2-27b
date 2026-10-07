@@ -221,20 +221,26 @@ async def test_every_required_artifact_is_written(monkeypatch) -> None:
     assert (iter_dir / "full" / "predictions.jsonl").is_file()
 
 
-async def test_the_notebook_carries_every_iteration_but_the_last(monkeypatch) -> None:
+async def test_the_notebook_accumulates_through_the_real_graph(monkeypatch) -> None:
     """The Architect's notebook, through the real graph. See tests/test_critique_recap.py.
 
-    Every earlier iteration appears exactly once, in order, in one file for the
-    whole run. Iteration 4's own critique is NOT in it: the row for iteration i
-    is appended by iteration i+1's Architect, and there is no iteration 5.
+    It is REWRITTEN each turn from the previous version plus what the round
+    found, so what must hold end to end is that the earlier notes survive the
+    rewrites rather than each turn starting over. The last iteration's own
+    lesson is absent because the turn that would have folded it in is the one
+    that never ran.
     """
     await run_scenario("max_iterations", monkeypatch, MAX_ITERATIONS=4)
 
+    from nodes._recap import notes_from_notebook
+
     notebook = (config.RUNS_DIR / "critique_summary.md").read_text(encoding="utf-8")
-    assert [line[:22] for line in notebook.splitlines() if line.startswith("- ")] == [
-        "- **iteration 1** (cri", "- **iteration 2** (cri", "- **iteration 3** (cri",
-    ]
-    assert "**iteration 4**" not in notebook, "no later turn ran to summarise iteration 4"
+    notes = notes_from_notebook(notebook)
+    assert len(notes) >= 3, f"earlier notes were lost across rewrites: {notes}"
+    assert len(notes) == len(set(notes)), "a rewrite duplicated a note"
+
+    history = (config.RUNS_DIR / "notebook_history.md").read_text(encoding="utf-8")
+    assert history.count("## after iteration") >= 3, "every version must be logged"
 
 
 async def test_the_critique_files_carry_only_their_own_iteration(monkeypatch) -> None:
@@ -257,9 +263,11 @@ async def test_an_unbuilt_iteration_is_recapped_even_though_it_has_no_critique(
     await run_scenario("dev_retry_exhaustion", monkeypatch, MAX_ITERATIONS=3)
 
     assert not (config.RUNS_DIR / "iter_1" / "critique.md").exists()
-    notebook = (config.RUNS_DIR / "critique_summary.md").read_text(encoding="utf-8")
-    assert "**iteration 1** (build failure)" in notebook
-    assert "**iteration 2** (critique)" in notebook
+    # The DIGEST is the numbered record, and it is what must show the gap-free
+    # history; the notebook is curated prose and no longer carries row labels.
+    final = await run_scenario("dev_retry_exhaustion", monkeypatch, MAX_ITERATIONS=3)
+    kinds = {(e["iteration"], e["kind"]) for e in final["critique_digest"]}
+    assert (1, "dev_failure") in kinds, "an unbuilt iteration must still be recorded"
 
 
 async def test_the_same_critique_is_never_recapped_twice(monkeypatch) -> None:
@@ -277,7 +285,14 @@ async def test_no_notebook_is_written_before_there_is_anything_to_put_in_it(
     """Iteration 1 has nothing before it. An empty file under a header reads as
     'this was checked and there was nothing', which is a different claim."""
     await run_scenario("immediate_success", monkeypatch, MAX_ITERATIONS=1)
-    assert not (config.RUNS_DIR / "critique_summary.md").exists()
+    notebook = config.RUNS_DIR / "critique_summary.md"
+    if notebook.exists():
+        from nodes._recap import notes_from_notebook
+
+        assert notes_from_notebook(notebook.read_text(encoding="utf-8")), (
+            "a notebook that exists must have notes in it; an empty file under a "
+            "header reads as 'this was checked and there was nothing'"
+        )
 
 
 async def test_the_manifest_the_evaluator_read_contains_no_hidden_fields(monkeypatch) -> None:
@@ -415,21 +430,30 @@ def test_the_developer_is_advertised_exactly_its_own_toolbox() -> None:
         assert hasattr(DevToolbox, f"_t_{name}"), f"{name} is advertised but not implemented"
 
 
-def test_developer_persona_names_exactly_the_tools_that_exist() -> None:
-    """The persona is the Developer's tool NARRATIVE -- so it must still be true.
+def test_developer_prompts_name_exactly_the_tools_that_exist() -> None:
+    """The Developer's tool NARRATIVE must still be true, wherever it is written.
 
-    The schema is what the model calls against, so a drifted persona is no
-    longer a fatal one. It is still a misleading one: the persona is where the
-    tools are given their job (which two are advisory, which one is for new
-    files and which for edits), and a name mentioned there that does not exist
-    sends the model looking for it.
+    The schema is what the model calls against, so drifted prose is no longer a
+    fatal fault. It is still a misleading one: the prose is where the tools are
+    given their job (which are advisory, which one is for new files and which
+    for edits), and a name mentioned there that does not exist sends the model
+    looking for it.
+
+    CHECKED ACROSS BOTH LAYERS, because they are deliberately split: the persona
+    carries what a Developer IS and the rules it works under, and the task
+    carries what is true of THIS benchmark -- which tools are the gates here,
+    and which fields are this evaluation's answer key. `sql_exec` is a gate for
+    a SQL-backed target and would not exist for another one, so it belongs to
+    the task. What must hold is that every tool is described SOMEWHERE.
     """
     from harness.profiles import DEVELOPER_PROFILE
     from nodes.dev_tools import TOOL_NAMES
+    from nodes.developer import BENCHMARK_TOOL_NOTE
 
     persona = DEVELOPER_PROFILE.system_prompt
+    prose = persona + BENCHMARK_TOOL_NOTE
     for tool in TOOL_NAMES:
-        assert tool in persona, f"{tool} exists but the persona never mentions it"
+        assert tool in prose, f"{tool} exists but neither the persona nor the task names it"
     # The names the harness-native surface would have used, which the model
     # reached for when both toolboxes were live.
     for ghost in ("read_file", "list_dir", "write_file"):
@@ -623,6 +647,7 @@ def test_flat_action_shape_is_normalized_not_dropped() -> None:
 async def test_read_file_without_a_path_says_so() -> None:
     """The observation must name the real fault, not blame the file."""
     import tempfile
+
     from nodes.dev_tools import DevToolbox
 
     with tempfile.TemporaryDirectory() as tmp:

@@ -260,13 +260,27 @@ def _architect_response(task: str) -> tuple[str, bool]:
     # condition of the mock's own -- it is conditional in nodes/architect.py, and
     # a mock that decided for itself when to answer would drift from the node it
     # stands in for the first time that condition changed.
-    if "`previous_critique_summary`" in task:
-        payload["previous_critique_summary"] = (
-            f"The Critic attributed the loss to {blamed} and traced it to the retrieval "
-            f"path, citing the failing checkpoints as evidence. It asked for a schema "
-            f"change rather than a prompt change, on the grounds that the failure is a "
-            f"lookup-visibility problem and not a wording one."
-        )
+    if "`notebook_notes`" in task:
+        # The CURATED list: whatever the notebook already held, plus this round's
+        # note. Carrying the existing notes forward is what a real Architect does
+        # and is what makes the mock exercise the rewrite -- a mock that returned
+        # only its own note would make every scenario look like a notebook that
+        # forgets, and hide exactly the regression these tests are here to catch.
+        section = task.split("## YOUR NOTEBOOK", 1)[-1].split("### REWRITING IT", 1)[0]
+        carried = re.findall(r"^- (.+)$", section, re.MULTILINE)
+        payload["notebook_notes"] = [
+            *dict.fromkeys(carried),
+            # Numbered so each round's note is distinct. A real Architect would
+            # not write the same sentence twice; a mock that did would make an
+            # accumulating notebook indistinguishable from one that forgets
+            # everything and re-adds one note, which is the regression the graph
+            # test exists to catch.
+            (
+                f"Round {len(carried) + 1}: the Critic attributed the loss to "
+                f"{blamed} and traced it to the retrieval path; it asked for a "
+                f"schema change."
+            ),
+        ]
 
     prose = (
         "# Design: SQL-backed multi-principal medical memory\n\n"

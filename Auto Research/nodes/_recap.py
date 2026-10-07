@@ -140,24 +140,56 @@ def _recap_lines(digest: list[dict[str, Any]]) -> list[str]:
 # -- would then depend on knowing which iteration's copy is the newest.
 
 
-def notebook_header(max_tokens: int) -> str:
-    """The preamble written once, when the notebook is first created."""
-    return (
-        f"{NOTEBOOK_HEADING}\n\n"
-        "The Architect's running notebook. One entry per iteration, appended by the\n"
-        "Architect turn that read that iteration's `critique.md` -- so the entry for\n"
-        f"iteration i is written at the start of iteration i+1 and capped at {max_tokens}\n"
-        "estimated tokens, which makes this file grow linearly with the run.\n\n"
-        "An iteration whose build never compiled produced no critique at all; it still\n"
-        "gets a row, marked `build failure`, because a gap in a numbered history reads\n"
-        "as a lost record rather than as the thing that actually happened.\n"
-    )
+HISTORY_FILENAME = "notebook_history.md"
+
+NOTEBOOK_PREAMBLE = (
+    "The Architect's notebook. It is REWRITTEN every iteration, by the Architect,\n"
+    "from the previous version plus what the latest round found -- so it is a\n"
+    "curated set of standing notes, not a transcript. A note survives because the\n"
+    "Architect judged it still worth knowing; one that has been superseded is\n"
+    "meant to be dropped or rewritten rather than left to contradict a newer one.\n\n"
+    "`notebook_history.md` beside it keeps every version, append-only, so what a\n"
+    "given iteration was shown can still be reconstructed.\n"
+)
 
 
-def render_notebook_entries(entries: list[dict[str, Any]]) -> str:
-    """The block appended to the notebook for the rows written this turn."""
-    lines = _recap_lines(entries)
-    return ("\n" + "\n".join(lines) + "\n") if lines else ""
+def notebook_header() -> str:
+    """The preamble, rewritten with the file each time."""
+    return f"{NOTEBOOK_HEADING}\n\n{NOTEBOOK_PREAMBLE}"
+
+
+def cap_words(text: str, max_words: int) -> str:
+    """One note, trimmed to `max_words` whole words.
+
+    Words rather than tokens because the budget is also stated to the model, and
+    a model can approximate a word count while it cannot count BPE tokens. The
+    cap is a backstop for a note that ignores the instruction, not the mechanism
+    the budget is meant to work through.
+    """
+    words = " ".join(str(text or "").split()).split(" ")
+    if len(words) <= max_words:
+        return " ".join(words)
+    return " ".join(words[:max_words]) + " ..."
+
+
+def cap_notes(notes: list[str], max_notes: int, max_words: int) -> list[str]:
+    """The note list, bounded in both directions.
+
+    WHOLE NOTES ARE DROPPED, NEVER HALF OF ONE. The previous scheme truncated
+    each per-iteration entry at 100 estimated tokens, which cut 63% of them
+    mid-sentence -- and because a summary runs diagnosis, then proposal, then
+    what was decided, the clause that got cut was systematically the decision:
+    exactly what the notebook exists to carry. Dropping a whole note at the tail
+    loses one note and keeps every surviving one readable.
+    """
+    cleaned = [cap_words(note, max_words) for note in notes if str(note or "").strip()]
+    return cleaned[:max_notes]
+
+
+def render_notebook(notes: list[str]) -> str:
+    """The notebook file, in full."""
+    body = "\n".join(f"- {note}" for note in notes)
+    return f"{notebook_header()}\n{body}\n" if body else ""
 
 
 def read_notebook(path: Path) -> str:
@@ -168,63 +200,97 @@ def read_notebook(path: Path) -> str:
         return ""
 
 
-def load_notebook(path: Path, digest: list[dict[str, Any]], max_tokens: int) -> str:
-    """The notebook text the Architect is shown.
+def notes_from_notebook(text: str) -> list[str]:
+    """The note list parsed back out of the file.
 
-    Read from disk, because that file is the deliverable and reading anything
-    else would let the two drift silently. `critique_digest` is the fallback
-    and not the source: a resumed run, a moved `RUNS_DIR` or a wiped artifacts
-    directory would otherwise cost the Architect the whole run's history, and
-    the digest carries exactly the same rows in macro-graph state.
+    The file is the source of truth -- state is the fallback -- so a resumed run
+    recovers its notes by reading what it wrote rather than by trusting a
+    snapshot that may be older.
     """
-    text = read_notebook(path)
-    if text.strip():
-        return text
-    lines = _recap_lines(digest)
-    if not lines:
-        return ""
-    return notebook_header(max_tokens) + "\n" + "\n".join(lines) + "\n"
+    return [
+        line.lstrip("-").strip()
+        for line in (text or "").splitlines()
+        if line.lstrip().startswith("- ")
+    ]
 
 
-def append_to_notebook(
-    path: Path, entries: list[dict[str, Any]], max_tokens: int
-) -> str:
-    """Append this turn's rows, creating the file with its header if need be.
+def load_notes(path: Path, state_notes: list[str] | None) -> list[str]:
+    """The notes the Architect is shown: the file, or state if it is gone."""
+    from_file = notes_from_notebook(read_notebook(path))
+    if from_file:
+        return from_file
+    return [str(n) for n in (state_notes or []) if str(n).strip()]
 
-    Returns the text appended, "" when there was nothing to add.  Appending
-    rather than rewriting is what makes the file an audit trail: a rewrite from
-    `critique_digest` would silently correct or drop a row that an earlier
-    iteration was actually shown.
+
+def write_notebook(path: Path, notes: list[str]) -> str:
+    """Replace the notebook with `notes`, and return what was written.
+
+    REFUSES TO WRITE AN EMPTY FILE. A model that returns no notes -- a timeout, a
+    reply with no json block, a key it forgot -- must not be able to erase the
+    run's memory, which under a rewrite-in-place scheme is a single bad response
+    away. The caller keeps the previous notebook in that case.
     """
-    block = render_notebook_entries(entries)
-    if not block:
+    if not notes:
         return ""
     path.parent.mkdir(parents=True, exist_ok=True)
-    header = "" if path.is_file() else notebook_header(max_tokens)
+    text = render_notebook(notes)
+    path.write_text(text, encoding="utf-8")
+    return text
+
+
+def append_history(path: Path, iteration: int, notes: list[str]) -> None:
+    """Append this iteration's version of the notebook to the audit log.
+
+    The notebook is now rewritten rather than appended to, which loses the
+    property the old append-only file had for free: being able to see what a
+    given iteration was actually shown. This log keeps it. Nothing reads it --
+    it is for the post-mortem, and for telling a curation from a loss.
+    """
+    if not notes:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    header = "" if path.is_file() else (
+        "# NOTEBOOK HISTORY\n\nEvery version of `critique_summary.md`, appended as it "
+        "was written. The notebook itself is curated and rewritten; this is not.\n"
+    )
+    block = f"\n## after iteration {iteration}\n" + "\n".join(f"- {n}" for n in notes) + "\n"
     with path.open("a", encoding="utf-8") as handle:
         handle.write(header + block)
-    return header + block
 
 
-def render_notebook_prompt(notebook: str) -> str:
-    """The notebook, as the Architect sees it in its task text.
+def render_notebook_prompt(notes: list[str], max_notes: int, max_words: int) -> str:
+    """The notebook, and the instruction to curate it, as the Architect sees it.
 
-    Empty string when there is nothing yet: an empty section under a heading
-    reads to a model as "this was checked and there was nothing", which is a
-    different and more misleading claim than saying nothing at all.
+    The instruction lives with the content on purpose: the Architect is being
+    asked to return the NEXT version of this exact list, and the rules for doing
+    that are unreadable away from the thing they apply to.
     """
-    body = (notebook or "").strip()
-    if not body:
-        return ""
-    return (
-        "\n## YOUR NOTEBOOK -- WHAT EARLIER ITERATIONS ALREADY FOUND (critique_summary.md)\n"
-        "This is the file you keep. One line per earlier iteration, summarised at the time\n"
-        "by the Architect turn that read it. These are things that have ALREADY been\n"
-        "diagnosed and acted on -- do not re-propose a change an earlier iteration already\n"
-        "made, and if a failure here keeps recurring, say why this design attacks it\n"
-        "differently. It does NOT yet contain the critique above; you will add that after\n"
-        "this design is written.\n\n"
-        f"{body}\n"
+    if notes:
+        body = "\n".join(f"- {note}" for note in notes)
+        current = (
+            "\n## YOUR NOTEBOOK -- WHAT THIS RUN HAS LEARNED SO FAR\n"
+            "You wrote this. It is the only memory that survives an iteration; the\n"
+            "designs and critiques of earlier rounds are not shown to you again.\n\n"
+            f"{body}\n"
+        )
+    else:
+        current = (
+            "\n## YOUR NOTEBOOK -- WHAT THIS RUN HAS LEARNED SO FAR\n"
+            "Empty: this is the first iteration to write it.\n"
+        )
+    return current + (
+        "\n### REWRITING IT\n"
+        "Return `notebook_notes`: the FULL list as it should stand after this\n"
+        "iteration -- not an addition to it. Whatever you leave out is forgotten.\n\n"
+        f"- At most {max_notes} notes, each at most {max_words} words.\n"
+        "- Keep a note while it still changes what a later iteration would do.\n"
+        "- Rewrite a note that a newer measurement has refined; DROP one that has\n"
+        "  been superseded or settled. Two notes that disagree cost you the reader.\n"
+        "- Record what was TRIED and what it MEASURED, not only what was wrong: a\n"
+        "  change that was made and did not help is the note that stops the run\n"
+        "  making it again.\n"
+        "- Write each note so it stands alone. A later iteration sees this list and\n"
+        "  nothing else from this round.\n"
     )
 
 

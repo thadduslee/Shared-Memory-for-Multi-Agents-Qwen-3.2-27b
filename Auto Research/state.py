@@ -99,9 +99,22 @@ class OrchestratorState(TypedDict, total=False):
     #
     # `operator.add` because it is append-only across the run and, like
     # `dev_failure_history`, is never reset between iterations -- resetting it
-    # would throw away the only thing it is for. Entries are capped at
-    # config.ARCHITECT_CRITIQUE_RECAP_MAX_TOKENS each; see nodes/_recap.py.
+    # would throw away the only thing it is for.
+    #
+    # IT IS NO LONGER WHAT THE NOTEBOOK IS BUILT FROM. The Architect curates
+    # `critique_summary.md` itself and returns the whole list each turn; these
+    # rows are the DERIVED, mechanical record of what each round measured, which
+    # `check_learning.py` audits the run against. Keeping the two independent is
+    # deliberate: a model that writes itself a flattering notebook must not also
+    # be writing the history it is judged by.
     critique_digest: Annotated[list[dict[str, Any]], operator.add]
+
+    # The Architect's curated notes, as last written. The FILE is the source of
+    # truth; this is the fallback `nodes._recap.load_notes` falls back to when
+    # the file is missing -- a resumed run, a moved RUNS_DIR, a wiped artifacts
+    # directory. Last-write-wins rather than `operator.add`: it is a snapshot of
+    # a list that is replaced wholesale, not a log that accumulates.
+    notebook_notes: list[str]
 
     # ---------------- Developer writes ----------------
     memory_codebase: str            # path to the workspace holding the current implementation
@@ -366,6 +379,7 @@ def initial_state(*, workspace: str, started_at: float) -> OrchestratorState:
         critique="",
         critique_iteration=0,
         critique_digest=[],
+        notebook_notes=[],
         attribution={},
         iteration_count=0,
         current_curriculum_phase=CURRICULUM_PHASES[0],

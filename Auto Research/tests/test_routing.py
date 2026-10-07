@@ -139,9 +139,28 @@ def test_skip_full_stage_defaults_off_so_research_runs_scale_up() -> None:
 # ======================================================================
 # 4. Curriculum
 # ======================================================================
+#
+# The curriculum is OFF by default (see config.CURRICULUM_ENABLED: on a
+# full-benchmark run phase_score is identically U, so the advance rule reduces
+# to "U >= 0.70" and the phase label points away from the failures). These tests
+# cover the behaviour when it is switched ON, so they enable it explicitly --
+# asserting the feature, not the default.
 
 
-def test_curriculum_failure_halts_the_remaining_phases() -> None:
+@pytest.fixture
+def curriculum_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(config, "CURRICULUM_ENABLED", True)
+
+
+def test_curriculum_is_off_by_default() -> None:
+    """The default must not advance or halt, whatever the phase score says."""
+    assert config.CURRICULUM_ENABLED is False
+    failed = base_state(judge_report={"phase_score": 0.0})
+    current = str(failed["current_curriculum_phase"])
+    assert routers.advance_curriculum(failed) == (current, False)
+
+
+def test_curriculum_failure_halts_the_remaining_phases(curriculum_on: None) -> None:
     state = base_state(
         judge_report={"phase_score": config.CURRICULUM_PASS_THRESHOLD - 0.01},
         proceed_to_full=True, mgs_score=0.95,
@@ -150,7 +169,7 @@ def test_curriculum_failure_halts_the_remaining_phases() -> None:
     assert routers.route_after_judge(state) == "critic"
 
 
-def test_curriculum_advances_only_on_pass() -> None:
+def test_curriculum_advances_only_on_pass(curriculum_on: None) -> None:
     passed = base_state(judge_report={"phase_score": 1.0})
     assert routers.advance_curriculum(passed)[0] == config.CURRICULUM_PHASES[1]
 
@@ -158,7 +177,7 @@ def test_curriculum_advances_only_on_pass() -> None:
     assert routers.advance_curriculum(failed)[0] == config.CURRICULUM_PHASES[0]
 
 
-def test_curriculum_reports_completion_on_the_last_phase() -> None:
+def test_curriculum_reports_completion_on_the_last_phase(curriculum_on: None) -> None:
     state = base_state(
         current_curriculum_phase=config.CURRICULUM_PHASES[-1],
         judge_report={"phase_score": 1.0},

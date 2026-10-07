@@ -289,6 +289,25 @@ def openrouter_reasoning(model: str) -> dict[str, object] | None:
 # Prefix-gated exactly like the OpenRouter block above: a non-thinking model
 # served on the same vLLM route would reject the unknown template kwarg.
 VLLM_DISABLE_THINKING: Final[bool] = _env_bool("VLLM_DISABLE_THINKING", True)
+
+# THE ANSWERER REASONS, BECAUSE THE BASELINES' DID. Every baseline output in
+# outputs/ was produced by the bench's own client, which never sends
+# `enable_thinking`, against a vLLM whose Qwen3 template default is thinking
+# ON (medical 2026-08-26: ~280 hidden reasoning tokens per answer, unreported
+# by that vLLM; office 2026-09-21: ~880, reported). The disable above was added
+# for the timeouts and silently scored our memory against a different answerer
+# in both domains. Measured on the 27 office expected-answer checkpoints the
+# keyed2 champion hard-refused, same evidence: thinking off 3/27 answered,
+# thinking on 22/27, zero refusals. So the EVALUATOR role keeps the template
+# default; the judge stays non-thinking (it is our own, and scores the
+# baselines the same way). The timeout that motivated the disable is handled
+# where it belongs: EVALUATOR_TIMEOUT_S below.
+EVALUATOR_THINKING: Final[bool] = _env_bool("EVALUATOR_THINKING", True)
+#: Per-call read timeout for the answerer. The office baselines averaged ~19s
+#: per reasoning answer at low concurrency; sixteen in flight on one GPU is
+#: several times that, and HTTP_TIMEOUT_S (120s) was sized for a non-thinking
+#: reply.
+EVALUATOR_TIMEOUT_S: Final[float] = _env_float("EVALUATOR_TIMEOUT_S", 900.0)
 VLLM_THINKING_MODEL_PREFIXES: Final[tuple[str, ...]] = tuple(
     prefix.strip()
     for prefix in _env("VLLM_THINKING_MODEL_PREFIXES", "Qwen/,qwen/").split(",")
@@ -296,13 +315,17 @@ VLLM_THINKING_MODEL_PREFIXES: Final[tuple[str, ...]] = tuple(
 )
 
 
-def vllm_chat_template_kwargs(model: str) -> dict[str, object] | None:
-    """vLLM `chat_template_kwargs` for `model`, or None to leave it alone.
+def vllm_chat_template_kwargs(model: str, role: str | None = None) -> dict[str, object] | None:
+    """vLLM `chat_template_kwargs` for `model` in `role`, or None to leave it alone.
 
-    Setting VLLM_DISABLE_THINKING=0 restores the model's own default template,
-    which is the escape hatch if a future evaluator model needs to reason.
+    None means the model's own template default -- for Qwen3, thinking ON.
+    The evaluator gets that default (see EVALUATOR_THINKING); every other role
+    on a thinking model gets `enable_thinking: False`. VLLM_DISABLE_THINKING=0
+    turns the disable off for everyone.
     """
     if not VLLM_DISABLE_THINKING:
+        return None
+    if role == "evaluator" and EVALUATOR_THINKING:
         return None
     if not any(model.startswith(prefix) for prefix in VLLM_THINKING_MODEL_PREFIXES):
         return None
@@ -319,6 +342,18 @@ def vllm_chat_template_kwargs(model: str) -> dict[str, object] | None:
 VLLM_MAX_CONCURRENCY: int = _env_int("VLLM_MAX_CONCURRENCY", 12)  # ~2 in-flight per GPU
 OPENROUTER_MAX_CONCURRENCY: int = _env_int("OPENROUTER_MAX_CONCURRENCY", 4)
 JUDGE_MAX_CONCURRENCY: int = _env_int("JUDGE_MAX_CONCURRENCY", 4)
+
+# How many checkpoints the Critic is shown in full -- id, action, answer and
+# retrieval counters -- as citable evidence.
+#
+# It was 12, hardcoded, out of 579 evaluated and ~100 failing, ranked by
+# severity. Because the mechanism buckets are computed over ALL failures, the
+# largest bucket routinely had no examples among those 12, and a Critic
+# instructed to support claims with evidence stood down on exactly the finding
+# worth the most. 40 gives every mechanism room for examples without turning the
+# prompt into a data dump; the evidence is stratified per bucket, so the number
+# bounds breadth rather than depth.
+CRITIC_EVIDENCE_MAX: int = _env_int("CRITIC_EVIDENCE_MAX", 40)
 
 HTTP_MAX_CONNECTIONS: int = _env_int("HTTP_MAX_CONNECTIONS", 64)
 HTTP_MAX_KEEPALIVE: int = _env_int("HTTP_MAX_KEEPALIVE", 16)
@@ -345,7 +380,18 @@ HTTP_RETRY_AFTER_MAX_S: float = _env_float("HTTP_RETRY_AFTER_MAX_S", 180.0)
 
 # Path to a GateMem checkout.  The medical domain lives at
 # {GATEMEM_REPO}/bench/data/medical/{episodes,checkpoints}.jsonl
-GATEMEM_REPO: Final[Path] = Path(_env("GATEMEM_REPO", str(Path.home() / "GateMem"))).expanduser()
+# Defaults to the checkout this package sits inside when that one HAS a bench/,
+# before falling back to ~/GateMem. The orchestrator now loads GateMem's own
+# prompt files as well as its data, so pointing at a tree without bench/ fails
+# later and further from the cause than it needs to.
+_VENDORED_GATEMEM = PROJECT_ROOT.parent
+GATEMEM_REPO: Final[Path] = Path(
+    _env(
+        "GATEMEM_REPO",
+        str(_VENDORED_GATEMEM if (_VENDORED_GATEMEM / "bench").is_dir()
+            else Path.home() / "GateMem"),
+    )
+).expanduser()
 GATEMEM_DOMAIN: Final[str] = "medical"
 GATEMEM_DATA_DIR: Final[Path] = GATEMEM_REPO / "bench" / "data" / GATEMEM_DOMAIN
 
@@ -503,6 +549,29 @@ HALT_ON_DEGRADED_EVAL: bool = _env_bool("HALT_ON_DEGRADED_EVAL", True)
 FAILFAST_SIGNATURE_K: int = _env_int("FAILFAST_SIGNATURE_K", 3)
 
 # Curriculum: a phase must score at least this on its own slice to advance.
+# The curriculum is OFF by default because, on a full-benchmark run, it does not
+# do what its name says -- it mislabels.
+#
+# `phase_score` is the pass rate on the DOMINANT phase, meaning the one with the
+# most checkpoints in the round. Evaluate all 579 and that is always
+# `standard_retrieval` (210), whose predicate is `query_type == "utility" and not
+# attack_type` -- i.e. the utility bucket. So `phase_score` IS `U`, identically,
+# every iteration, and the advance rule reduces to "U >= 0.70".
+#
+# Measured on runs_full579_v4/buckets_told: phase_score equalled U to three
+# decimals in all 20 iterations; the phase advanced one step per iteration from
+# iteration 2 and parked on `adversarial_injection` at iteration 7. For the
+# remaining 13 iterations the Architect was told it was designing for
+# adversarial injection -- which was at 0.978 -- while the losses were 23
+# checkpoints in standard_retrieval and 9 in cross_principal_leakage. The label
+# was not merely inert; it pointed away from the failures.
+#
+# It was sound when the dev slice was 50 stratified checkpoints and the current
+# phase genuinely dominated the sample. It is not sound on the full benchmark.
+# Set CURRICULUM_ENABLED=true to restore the advance/halt behaviour; the phase
+# BREAKDOWN in judge_report is unaffected either way and stays useful.
+CURRICULUM_ENABLED: bool = _env_bool("CURRICULUM_ENABLED", False)
+
 CURRICULUM_PASS_THRESHOLD: float = _env_float("CURRICULUM_PASS_THRESHOLD", 0.70)
 
 # Ordered easy -> hard.  Phase names are the brief's; the mapping from these
@@ -602,6 +671,52 @@ JUDGE_TRANSPORT: str = _env("JUDGE_TRANSPORT", "dsh")  # dsh | http
 # the LLM pass is what catches a paraphrased leak.
 USE_LLM_JUDGE: bool = _env_bool("USE_LLM_JUDGE", True)
 
+# Which scoring rules the Judge uses.
+#
+#   "gatemem" (default) -- `nodes/judge_gatemem.py`: GateMem's own matcher
+#       (bench/eval/metrics.pattern_hits) and GateMem's own authority model,
+#       where the LLM judge is PRIMARY for utility and the rule pass is
+#       auxiliary, exactly as bench/eval/scorer.py's docstring says it should
+#       be.  Leaks remain monotone-worse.
+#   "legacy" -- the rules `nodes/judge.py` grew on its own: a bare
+#       `re.search` over `answer` alone, binding, with the LLM able only to
+#       downgrade it.
+#
+# The default changed to "gatemem" because "legacy" is what froze
+# runs_real_100iter_v4: four of its six utility "failures" at iteration 20
+# were answers that already contained every required fact in a different word
+# order, so the loop spent nine iterations rewriting a retrieval layer that
+# was working.  Set "legacy" to reproduce a pre-change run exactly.
+JUDGE_IMPL: str = _env("JUDGE_IMPL", "gatemem")  # gatemem | legacy
+
+# The Evaluator and the Judge run GateMem's OWN prompt files, not wording of
+# ours: the Evaluator is the system under test as the benchmark defines it and
+# the Judge is its scoring instrument, so a prompt we wrote would silently
+# redefine the measurement and make the numbers incomparable with the paper.
+#
+# Empty = the file shipped in the GateMem checkout:
+#   bench/prompts/query_prompt.txt   -> Evaluator
+#   bench/prompts/judge_prompt.txt   -> Judge
+#
+# NOT judge_prompt_gatemem.txt, which is the longer variant; this project scores
+# against judge_prompt.txt and mixing them is comparable to neither. Set either
+# path to substitute your own file; see prompts_gatemem.py.
+EVALUATOR_PROMPT_FILE: str = _env("EVALUATOR_PROMPT_FILE", "")
+JUDGE_PROMPT_FILE: str = _env("JUDGE_PROMPT_FILE", "")
+
+# Which prompt the two benchmark-facing nodes use. `gatemem` loads the files
+# above; `local` keeps this project's hand-written prompts, which score higher
+# and mean less.
+BENCHMARK_PROMPTS: str = _env("BENCHMARK_PROMPTS", "gatemem")  # gatemem | local
+
+# GateMem's end-to-end leak definition also scans the memory context that was
+# exposed TO the answer model, so a leak that reached the prompt counts even if
+# the model did not repeat it.  Off by default: predictions written before
+# `memory_audit` existed carry no context to scan, so enabling it mid-run would
+# move A and F for reasons unrelated to the system under test.  It can only
+# make those two terms worse, never better.
+JUDGE_SCORE_PROMPT_CONTEXT: bool = _env_bool("JUDGE_SCORE_PROMPT_CONTEXT", False)
+
 
 # ==========================================================================
 # 7. Budget guard  (brief section 7, final bullet)
@@ -688,23 +803,25 @@ ARCHITECT_CODE_VIEW_MAX_CHARS: int = _env_int("ARCHITECT_CODE_VIEW_MAX_CHARS", 9
 # once the budget runs out (`nodes.developer` has already truncated each one).
 ARCHITECT_DEV_FAILURE_MAX_CHARS: int = _env_int("ARCHITECT_DEV_FAILURE_MAX_CHARS", 12_000)
 
-# How much of ONE earlier iteration the Architect's notebook is allowed to carry.
+
+# The Architect's notebook, which it now CURATES rather than appends to.
 #
-# Every Architect turn summarises the critique it was handed and appends that
-# summary to `runs/critique_summary.md`, the notebook it keeps (see
-# nodes/_recap.py). The notebook is append-only, so an uncapped entry would grow
-# both the file and every subsequent Architect prompt without bound.
+# WHAT CHANGED AND WHY. The notebook used to take one summary per iteration,
+# each truncated to 100 estimated tokens, appended forever. Measured over a real
+# 19-entry run: 63% of entries were cut mid-sentence. Worse, they were cut in a
+# predictable place -- a summary runs diagnosis, then what was asked for, then
+# what was decided, so the clause that got dropped was systematically the
+# DECISION, which is the one thing the notebook exists to carry ("do not
+# re-propose a change an earlier iteration already made"). It also had no way to
+# retire a finding that later rounds disproved: an append-only log of stale
+# conclusions grows monotonically less true.
 #
-# THE CAP IS PER ENTRY, NOT PER FILE. One capped entry per iteration makes the
-# growth linear -- ~1k tokens across a full MAX_ITERATIONS=10 run, which is
-# nothing against ARCHITECT_CODE_VIEW_MAX_CHARS. Capping the notebook as a whole
-# would instead force every entry to shrink as the run went on, and the earliest
-# iterations -- whose lessons are the ones most likely to have been forgotten --
-# are exactly the ones that squeezing would erase first.
-#
-# Counted with the estimator in `nodes._recap.approx_tokens`, which takes no
-# tokenizer dependency and deliberately over-estimates.
-ARCHITECT_CRITIQUE_RECAP_MAX_TOKENS: int = _env_int("ARCHITECT_CRITIQUE_RECAP_MAX_TOKENS", 100)
+# So the Architect returns the whole list each turn and the file is replaced.
+# Both budgets are stated to the model as well as enforced, and both are
+# countable BY a model -- a note count and a word count, where "100 tokens" was
+# not something it could check itself.
+ARCHITECT_NOTEBOOK_MAX_NOTES: int = _env_int("ARCHITECT_NOTEBOOK_MAX_NOTES", 40)
+ARCHITECT_NOTEBOOK_MAX_WORDS: int = _env_int("ARCHITECT_NOTEBOOK_MAX_WORDS", 45)
 
 LOG_LEVEL: Final[str] = _env("LOG_LEVEL", "INFO")
 
@@ -820,6 +937,11 @@ class RouteConfig:
     api_key_env: str
     max_concurrency: int
     extra_headers: dict[str, str] = field(default_factory=dict)
+    # Whether this route is a vLLM server, and so gets `chat_template_kwargs`.
+    # Declared rather than inferred from the literal name "vllm", because a
+    # Judge on the `openai` route can point at a local vLLM too (see
+    # openai_route), and a name check silently skipped its thinking-disable.
+    is_vllm: bool = False
 
 
 def openrouter_route() -> RouteConfig:
@@ -842,6 +964,7 @@ def vllm_route() -> RouteConfig:
         base_url=VLLM_BASE_URL,
         api_key_env=VLLM_API_KEY_ENV,
         max_concurrency=VLLM_MAX_CONCURRENCY,
+        is_vllm=True,
     )
 
 
@@ -851,4 +974,12 @@ def openai_route() -> RouteConfig:
         base_url=OPENAI_BASE_URL,
         api_key_env=OPENAI_API_KEY_ENV,
         max_concurrency=JUDGE_MAX_CONCURRENCY,
+        # OPENAI_BASE_URL pointed at a local vLLM is how a local Judge is wired
+        # (scripts/serve/serve_judge.sh). Without this the thinking-disable is
+        # never sent and a Qwen judge reasons at its default effort on every
+        # checkpoint.
+        is_vllm=_env_bool(
+            "OPENAI_ROUTE_IS_VLLM",
+            not OPENAI_BASE_URL.startswith(("https://api.openai.com", "https://openrouter.ai")),
+        ),
     )

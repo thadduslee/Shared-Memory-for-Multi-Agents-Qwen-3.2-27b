@@ -47,12 +47,15 @@ from harness.dsh_client import looks_like_tool_call_markup, strip_tool_call_mark
 from harness.profiles import ARCHITECT_PROFILE
 from nodes._common import node_span, usage_delta, write_artifact
 from nodes._recap import (
-    append_to_notebook,
+    HISTORY_FILENAME,
+    append_history,
+    cap_notes,
     dev_failure_summary,
     digest_entry,
     fallback_critique_summary,
-    load_notebook,
+    load_notes,
     render_notebook_prompt,
+    write_notebook,
 )
 from nodes._transport import agent_call_json
 from state import RESET, OrchestratorState
@@ -210,8 +213,8 @@ _CLASSIFICATION_GUIDANCE: dict[str, str] = {
   the work order did not tell it concretely enough what to change.
 - Rewrite the WORK ORDER, not the design. Every step must name a file, a
   function, and what that function does differently afterwards. A step like
-  "implement retrieve()" against code that already has one is not actionable and
-  is what produces an episode of reading.
+  "implement <function>" against code that already has one is not actionable
+  and is what produces an episode of reading.
 - Cut the number of steps. An episode that lands three concrete edits is worth
   more than one that reads the whole workspace deciding where to start.
 - Say under `dev_failure_mitigations` which steps you made concrete.
@@ -559,7 +562,9 @@ def _recap_additions(
     the file is prose, and the digest is the structured record of exactly which
     iterations have already been written into it.
     """
-    cap = int(config.ARCHITECT_CRITIQUE_RECAP_MAX_TOKENS)
+    # A generous fixed cap: these rows are a machine-read record, not prompt
+    # text, so the reason the old notebook budget was tight does not apply.
+    cap = 400
     already = {
         int(entry.get("iteration") or 0)
         for entry in (state.get("critique_digest") or [])
@@ -579,17 +584,13 @@ def _recap_additions(
     if critique.strip():
         source = _critique_source_iteration(state, iteration)
         if source and source not in already:
-            summary = str(block.get("previous_critique_summary") or "").strip()
-            if not summary:
-                # Not an error worth stopping for: the design itself parsed, and
-                # a mechanical summary of the measured attribution carries the
-                # same facts. Logged so a model that never fills the key in is
-                # visible rather than silently papered over.
-                log.info(
-                    "architect returned no previous_critique_summary for iteration %d; "
-                    "recapping from the attribution instead", source,
-                )
-                summary = fallback_critique_summary(state.get("attribution") or {}, source)
+            # DERIVED, not asked for. The Architect's own summary now goes into
+            # the notebook it curates; this row is the mechanical record of what
+            # the round measured, which `check_learning.py` reads to tell a
+            # design regression from a harness outage. Deriving it keeps the two
+            # independent: a model that writes a flattering notebook cannot also
+            # rewrite the history it is audited against.
+            summary = fallback_critique_summary(state.get("attribution") or {}, source)
             additions.append(digest_entry(source, summary, "critique", cap))
 
     additions.sort(key=lambda entry: entry["iteration"])
@@ -721,6 +722,10 @@ async def architect_node(state: OrchestratorState) -> dict[str, Any]:
         # path `critique` is stale (or empty) and this block is the ONLY
         # feedback about the iteration that just failed.
         dev_failure = _developer_failure_block(state)
+        # Omitted entirely when the curriculum is off: naming a phase the run is
+        # not actually gated on tells the model to design for a slice instead of
+        # for the benchmark. See config.CURRICULUM_ENABLED.
+        phase_block = f"## CURRENT CURRICULUM PHASE\n{phase}\n\n" if config.CURRICULUM_ENABLED else ""
 
         # The `dominant_term` marker is what the mock (and a real Critic-aware
         # Architect) keys its targeted migration off; keep the token stable.
@@ -747,37 +752,56 @@ async def architect_node(state: OrchestratorState) -> dict[str, Any]:
         # ---- (c) STEP 2: the notebook of every iteration BEFORE that one ----
         #
         # Read here, before the model call, and appended to only after it (step
-        # 4, below the design writes). What this turn is shown is therefore
-        # iterations 1..i-1; iteration i is the critique above, in full. The two
-        # never overlap, so the design cannot be answering a summary of the same
-        # critique it already has verbatim in front of it.
-        recap_cap = int(config.ARCHITECT_CRITIQUE_RECAP_MAX_TOKENS)
+        # ---- the notebook, and the instruction to rewrite it ----
+        #
+        # WHAT THE ARCHITECT IS SHOWN is the notebook as it stands BEFORE this
+        # round's critique is folded into it; the critique itself is above, in
+        # full. The two never overlap, so the design is never answering a
+        # summary of the critique it already has verbatim.
         notebook_path = config.critique_summary_path()
+        notebook_notes = load_notes(notebook_path, state.get("notebook_notes"))
         notebook_block = render_notebook_prompt(
-            load_notebook(notebook_path, state.get("critique_digest") or [], recap_cap)
+            notebook_notes,
+            config.ARCHITECT_NOTEBOOK_MAX_NOTES,
+            config.ARCHITECT_NOTEBOOK_MAX_WORDS,
         )
 
-        # The one summary key that extends it. Conditional for the same reason
-        # `mitigation_key` is: on iteration 1 there is no critique to summarise,
-        # and a model asked for a summary of something that does not exist writes
-        # one anyway -- which would seed the notebook with fiction on its very
-        # first row and carry it for the rest of the run.
+        # Asked for on every iteration, including the first. Unlike the old
+        # per-iteration summary there is always something to write -- the first
+        # round still learns what the baseline measured -- and an empty reply
+        # cannot wipe the file, because `write_notebook` refuses to.
         summary_key = (
-            f"\nAlso include `previous_critique_summary`: at most {recap_cap} tokens of plain\n"
-            "prose summarising the CRITIQUE FROM THE PREVIOUS ITERATION above -- what it\n"
-            "found, which component it blamed, and what it asked for. You will append it to\n"
-            "critique_summary.md after this design, and every later iteration reads that\n"
-            "file, so write it for someone who will never see the full critique. No\n"
-            "markdown, no lists, one paragraph."
-            if critique.strip() else ""
+            "\nAlso include `notebook_notes`: an array of strings, the FULL notebook as\n"
+            "it should stand after this iteration. See the notebook section above for\n"
+            "what to keep, rewrite and drop. Whatever you leave out is forgotten."
         )
 
+        # The BENCHMARK-SPECIFIC half of the Architect's instructions lives here,
+        # in the task, not in the persona. The persona says what an Architect IS
+        # and how it decides; what it is designing, what the metric means and
+        # what the storage is allowed to be are properties of this benchmark and
+        # belong to the round. Keeping them here is what lets the same Architect
+        # be pointed at a different benchmark by changing the task alone.
         task = f"""You are designing iteration {iteration} of the memory system.
 
-## CURRENT CURRICULUM PHASE
-{phase}
+## WHAT YOU ARE DESIGNING
+A medical-grade shared memory system serving several principals -- patients,
+clinicians, family members, schedulers -- with different authorization over one
+memory pool. It MUST cross-reference retrieved records against an access-control
+model before they reach the answerer, and it MUST implement active forgetting
+(explicit deletion or cryptographic shredding) such that deleted content cannot
+be recovered, restated, or confirmed to have existed.
 
-## MEASURED PERFORMANCE -- EVERY ITERATION, NOT JUST THE LAST ONE
+## STORAGE CONSTRAINT (non-negotiable)
+The backing store is SQL only -- SQLite, one database file per run. Do NOT
+propose a vector database, a graph database or a document store as the primary
+store. You MAY change the schema: new/renamed/dropped columns, composite and
+partial indexes, denormalization, generated columns, and changes to how
+deletion is represented. Emit every schema change as an explicit ALTER TABLE /
+CREATE INDEX statement with a one-line rationale naming the query path it
+serves.
+
+{phase_block}## MEASURED PERFORMANCE -- EVERY ITERATION, NOT JUST THE LAST ONE
 MGS = U * (1 - A) * (1 - F).  U is utility_accuracy (higher is better); A is
 privacy_leakage_rate and F is deletion_leakage_rate (LOWER is better).
 {trend_block}
@@ -807,8 +831,8 @@ Produce the design document and the Developer's work order.
 THE WORK ORDER IS A DELTA AGAINST THE IMPLEMENTATION ABOVE, NOT A REBUILD OF IT.
 The Developer inherits that exact workspace, already compiling and already
 passing its tests, and its episode is REJECTED if it finishes without changing a
-source file -- so a step like "implement `retrieve()`" against code that already
-has one buys nothing and costs the iteration. Every step must name a change:
+source file -- so a step that restates a function the code already has buys
+nothing and costs the iteration. Every step must name a change:
 what file, what function, and what it does differently afterwards. If a
 mechanism is already present and correct, do not restate it as work; spend the
 iteration on the term the measurements above say is losing.
@@ -914,25 +938,51 @@ expected_tradeoff.{mitigation_key}{summary_key}
             },
         )
 
-        # ---- STEP 4: append to the notebook, LAST ----
+        # ---- STEP 4: rewrite the notebook, LAST ----
         #
         # After the design is written, never before it: this turn designed from
         # the critique in full and from the notebook as it stood WITHOUT that
-        # critique in it, and appending here is what preserves that for the next
-        # turn. Appending rather than rewriting from `critique_digest` also keeps
-        # the file an audit trail -- a rewrite could silently correct or drop a
-        # row that an earlier iteration was actually shown.
-        if recap_additions:
-            append_to_notebook(notebook_path, recap_additions, recap_cap)
+        # critique folded in, and writing here is what preserves that ordering
+        # for the next turn.
+        #
+        # THE FILE IS REPLACED, NOT APPENDED TO. The Architect returns the whole
+        # list, so a note it dropped is gone and a note it rewrote supersedes the
+        # old wording -- which is the point: the previous scheme appended one
+        # capped row per iteration and could never retire a finding that later
+        # rounds disproved. `notebook_history.md` keeps every version so the
+        # curation is still auditable, and `write_notebook` refuses an empty
+        # list, so one bad reply cannot erase the run's memory.
+        returned_notes = block.get("notebook_notes")
+        notes_out = cap_notes(
+            [str(n) for n in returned_notes if str(n).strip()]
+            if isinstance(returned_notes, list) else [],
+            config.ARCHITECT_NOTEBOOK_MAX_NOTES,
+            config.ARCHITECT_NOTEBOOK_MAX_WORDS,
+        )
+        if notes_out:
+            write_notebook(notebook_path, notes_out)
+            append_history(
+                notebook_path.parent / HISTORY_FILENAME, iteration, notes_out
+            )
             log.info(
-                "architect iter=%d: appended %s to %s (%d entries total)",
-                iteration,
-                ", ".join(f"iter {e['iteration']} ({e['kind']})" for e in recap_additions),
-                notebook_path.name,
-                len(state.get("critique_digest") or []) + len(recap_additions),
+                "architect iter=%d: rewrote %s (%d note(s), was %d)",
+                iteration, notebook_path.name, len(notes_out), len(notebook_notes),
+            )
+        else:
+            # Not fatal and not silent. The notebook keeps its previous contents,
+            # so the run loses this iteration's lesson rather than its memory.
+            notes_out = notebook_notes
+            log.warning(
+                "architect iter=%d returned no notebook_notes; %s keeps its previous "
+                "%d note(s) and this iteration's lesson is not recorded",
+                iteration, notebook_path.name, len(notebook_notes),
             )
 
         return {
+            # The curated notes, carried in state as the fallback `load_notes`
+            # uses when the file is gone -- a resumed run, a moved RUNS_DIR, a
+            # wiped artifacts directory. The FILE stays the source of truth.
+            "notebook_notes": notes_out,
             "proposed_design": design,
             "sql_schema": schema_ddl,
             "migration_sql": migration_sql,

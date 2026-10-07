@@ -509,6 +509,26 @@ def _turn_budget_block(state: DeveloperState, turns_used: int) -> str:
     )
 
 
+# The benchmark-specific half of the Developer's instructions: which tools are
+# gates HERE, and which fields are THIS evaluation's answer key. The persona
+# states the rules ("every gate the task names", "never read the evaluation's
+# label fields"); the names belong to the round, so pointing this loop at
+# another target means changing the task and not the agent.
+#
+# tests/test_graph_paths.py checks the persona and this note TOGETHER against
+# the real tool list, so a tool may move between the two but cannot go unnamed.
+BENCHMARK_TOOL_NOTE = """## GATES FOR THIS BUILD
+`compile_check`, `run_tests` and `sql_exec` are the gates -- all three must have
+run and passed in this episode before you call `finish`. `run_linter` and
+`run_sandbox_smoke_test` are advisory: run them, but a finding in either blocks
+nothing.
+
+## LABEL FIELDS YOU MUST NOT READ
+`query_type`, `attack_type`, `expected_action`, `judge_spec`, `leak_targets`.
+These are the scoring labels for the checkpoints this system is evaluated on.
+"""
+
+
 def _status_block(state: DeveloperState, box: DevToolbox, turns_used: int = 0) -> str:
     """The machine-readable status the model reacts to.
 
@@ -1570,7 +1590,12 @@ class DeveloperSession:
     # ------------------------------------------------------------------
 
     def _work_order(self) -> str:
-        return f"""## WORK ORDER FROM THE ARCHITECT
+        # The benchmark-specific half of the Developer's instructions: which
+        # tools are gates here, and which fields are this evaluation's answer
+        # key. The persona states the RULE ("every gate the task names", "never
+        # read the evaluation's label fields"); the names belong to the round.
+        return f"""{BENCHMARK_TOOL_NOTE}
+## WORK ORDER FROM THE ARCHITECT
 {self.state.get('instructions', '')}
 
 ## MIGRATION TO APPLY

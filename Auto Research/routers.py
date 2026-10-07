@@ -204,7 +204,7 @@ def route_after_judge(state: dict[str, Any]) -> str:
     report = state.get("judge_report") or {}
     phase_score = float(report.get("phase_score", 1.0))
 
-    if phase_score < config.CURRICULUM_PASS_THRESHOLD:
+    if config.CURRICULUM_ENABLED and phase_score < config.CURRICULUM_PASS_THRESHOLD:
         log.warning(
             "curriculum phase %s FAILED (%.3f < %.2f): halting remaining phases",
             state.get("current_curriculum_phase"), phase_score, config.CURRICULUM_PASS_THRESHOLD,
@@ -350,6 +350,10 @@ def advance_curriculum(state: dict[str, Any]) -> tuple[str, bool]:
     than a fixed schedule.
     """
     current = str(state.get("current_curriculum_phase") or config.CURRICULUM_PHASES[0])
+    if not config.CURRICULUM_ENABLED:
+        # Never advance and never halt: with the curriculum off the run works the
+        # whole benchmark every iteration, which is what it was already doing.
+        return current, False
     report = state.get("judge_report") or {}
     passed = float(report.get("phase_score", 0.0)) >= config.CURRICULUM_PASS_THRESHOLD
 

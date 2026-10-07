@@ -57,14 +57,18 @@ def test_the_flag_is_the_off_switch(monkeypatch: pytest.MonkeyPatch) -> None:
     assert config.vllm_chat_template_kwargs("Qwen/Qwen3.8-27B") is None
 
 
-def test_default_policy_disables_thinking_for_the_evaluator() -> None:
+def test_default_policy_lets_the_evaluator_think_and_nobody_else() -> None:
     """The shipped default, exactly -- a regression fence around the value.
 
-    If this reverts to None the Evaluator goes back to reasoning past the read
-    timeout and recording an empty answer for every checkpoint that retrieved
-    successfully, which reads downstream as a total retrieval failure.
+    The answerer reasons because every baseline's did (template default, never
+    overridden by the bench client). The judge does not: it scores the
+    baselines the same way. The timeout that once motivated disabling it for
+    the evaluator is carried by EVALUATOR_TIMEOUT_S instead.
     """
-    assert config.vllm_chat_template_kwargs(config.EVALUATOR_MODEL) == {"enable_thinking": False}
+    assert config.vllm_chat_template_kwargs("Qwen/Qwen3.8-27B", "evaluator") is None
+    assert config.vllm_chat_template_kwargs("Qwen/Qwen3.8-27B", "judge") == {"enable_thinking": False}
+    assert config.vllm_chat_template_kwargs("Qwen/Qwen3.8-27B") == {"enable_thinking": False}
+    assert config.EVALUATOR_TIMEOUT_S >= 600
 
 
 # ----------------------------------------------------------------------

@@ -280,12 +280,12 @@ class AsyncLLMClient:
             reasoning = config.openrouter_reasoning(model)
             if reasoning:
                 payload["reasoning"] = reasoning
-        if route_cfg.name == "vllm":
+        if route_cfg.is_vllm:
             # The vLLM-route twin of the reasoning cap above: stop a hybrid
             # thinking model from reasoning past HTTP_TIMEOUT_S and returning an
             # empty answer. Only vLLM understands this key; OpenRouter and
             # OpenAI would reject it.
-            template_kwargs = config.vllm_chat_template_kwargs(model)
+            template_kwargs = config.vllm_chat_template_kwargs(model, role)
             if template_kwargs:
                 payload["chat_template_kwargs"] = template_kwargs
 

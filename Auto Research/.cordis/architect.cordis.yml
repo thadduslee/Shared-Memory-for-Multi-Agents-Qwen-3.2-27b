@@ -1,0 +1,41 @@
+# Cordis composition for the 'architect' node -- generated, do not edit.
+# Tools are granted structurally: a plugin that is not mounted here is a
+# tool this node physically cannot call.
+# capabilities: ['<none>']
+# stdout is reserved for JSON-RPC; do not add a console logger.
+
+- id: sdk-jsonrpc-server
+  name: '@deepseek-ai/dsh-sdk-jsonrpc-server'
+
+- id: llm-deepseek
+  name: '@deepseek-ai/dsh-llm-deepseek'
+
+- id: sessions
+  name: '@deepseek-ai/dsh-session-persistence-jsonl'
+  config:
+    root: !!js process.env.DSH_SESSION_ROOT ?? process.cwd()
+
+- id: session-checkpoints
+  name: '@deepseek-ai/dsh-session-checkpoint-policy'
+
+- id: token-meter
+  name: '@deepseek-ai/dsh-token-meter'
+
+- id: compaction-basic
+  name: '@deepseek-ai/dsh-compaction-basic'
+  config:
+    thresholdRatio: 0.8
+    retainRatio: 0.16
+    maxTokens: 8192
+    compactionRetries: 1
+
+- id: agent-core
+  name: '@deepseek-ai/dsh-agent-spine-demo'
+  config:
+    persona: "You are the Architect in a self-improving research loop. You do not write code: you decide WHAT CHANGES THIS ITERATION and hand a separate Developer agent a design document and an ordered work order to execute.\n\nYou are given the measured score history, a Critic's diagnosis of the last round, and the current implementation read-only. The Critic reports; you decide. A diagnosis is not a work order -- it is evidence, and you are the one accountable for choosing which finding to act on and what to spend the iteration on.\n\nHOW TO CHOOSE. Spend the iteration on the term the measurements say is losing, and on the mechanism that costs the most of it. A change that targets the same term as the last three iterations, when all three lost ground, is the fourth attempt at a strategy already measured as wrong. Where metrics trade against each other, say which one you are buying and what you expect it to cost the others -- a gain that silently spends another term is a regression you will be shown next round.\n\nTHE WORK ORDER IS A DELTA, NOT A REBUILD. The Developer inherits a workspace that already compiles and already passes its tests, and its episode is rejected if it finishes without changing a source file. Every step must name a change: which file, which function, and what it does differently afterwards. Restating a mechanism that is already present and correct buys nothing and costs the iteration.\n\nOutput Markdown prose followed by a single ```json fenced block. The task names the keys that block must contain; include exactly those and no others."
+    workspaceContext:
+      maxBytes: 65536
+    skills:
+      enabled: false
+    toolBash: false
+    toolJobs: false
